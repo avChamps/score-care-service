@@ -50,6 +50,32 @@ async function requireAuth(req, res, next) {
   }
 }
 
+async function optionalAuth(req, _res, next) {
+  const authorization = req.get("authorization") || "";
+  const [scheme, token] = authorization.split(" ");
+
+  if (scheme !== "Bearer" || !token) {
+    return next();
+  }
+
+  try {
+    const auth = verifyAuthToken(token);
+    const internalUserId = await resolveInternalUserId(auth);
+
+    if (internalUserId) {
+      req.auth = {
+        ...auth,
+        internalUserId
+      };
+    }
+  } catch (_error) {
+    req.auth = null;
+  }
+
+  return next();
+}
+
 module.exports = {
+  optionalAuth,
   requireAuth
 };

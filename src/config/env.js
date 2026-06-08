@@ -42,6 +42,15 @@ const env = {
       process.env.SUREPASS_CIBIL_REPORT_PATH ||
       "/api/v1/credit-report-cibil/fetch-report-pdf"
   },
+  gemini: {
+    apiKey: process.env.GEMINI_API_KEY || "",
+    baseUrl:
+      process.env.GEMINI_BASE_URL ||
+      "https://generativelanguage.googleapis.com/v1beta",
+    model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    maxAttempts: Number(process.env.GEMINI_MAX_ATTEMPTS || 6),
+    retryDelayMs: Number(process.env.GEMINI_RETRY_DELAY_MS || 1000)
+  },
   db: {
     host: process.env.DB_HOST || "localhost",
     port: Number(process.env.DB_PORT || 3306),

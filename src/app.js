@@ -4,6 +4,7 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 
 const env = require("./config/env");
+const aiRoutes = require("./routes/ai.routes");
 const authRoutes = require("./routes/auth.routes");
 const creditReportRoutes = require("./routes/credit-report.routes");
 const healthRoutes = require("./routes/health.routes");
@@ -32,6 +33,7 @@ app.get("/", (_req, res) => {
 });
 
 app.use("/auth", authRoutes);
+app.use("/ai", aiRoutes);
 app.use("/credit-reports", creditReportRoutes);
 app.use("/health", healthRoutes);
 app.use("/users", userRoutes);
