@@ -11,7 +11,10 @@ function errorHandler(error, _req, res, _next) {
   res.status(statusCode).json({
     status: "error",
     message: statusCode === 500 ? "Internal server error" : error.message,
-    details: process.env.NODE_ENV === "production" ? undefined : error.message
+    details:
+      process.env.NODE_ENV === "production"
+        ? undefined
+        : error.details || error.message
   });
 }
 

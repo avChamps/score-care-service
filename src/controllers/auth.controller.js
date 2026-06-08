@@ -90,7 +90,7 @@ async function verifyOtp(req, res, next) {
       ? await sendUserCreatedWhatsappAlert(user)
       : { status: "skipped", reason: "Existing user login" };
     const token = createAuthToken({
-      userId: user.id,
+      userId: user.publicId,
       mobileNumber,
       mobileVerified: true,
       tokenType: "access"

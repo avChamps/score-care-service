@@ -1,6 +1,7 @@
 const {
   createLoginEvent,
   findUserById,
+  findUserByPublicId,
   hasWelcomeEmailBeenSent,
   listLoginEventsByUserId,
   markWelcomeEmailSent,
@@ -13,10 +14,39 @@ const {
 const {
   sendWelcomeEmail
 } = require("../services/profile-email.service");
+const {
+  findCibilReportByUserId
+} = require("../models/credit-report.model");
 
 const mobilePattern = /^[6-9]\d{9}$/;
 const panPattern = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+function getAuthInternalUserId(req) {
+  return req.auth.internalUserId || req.auth.userId;
+}
+
+function formatDateTime(value) {
+  if (!value) {
+    return null;
+  }
+
+  if (typeof value === "string") {
+    return value;
+  }
+
+  const pad = (number) => String(number).padStart(2, "0");
+
+  return [
+    value.getFullYear(),
+    pad(value.getMonth() + 1),
+    pad(value.getDate())
+  ].join("-") + " " + [
+    pad(value.getHours()),
+    pad(value.getMinutes()),
+    pad(value.getSeconds())
+  ].join(":");
+}
 
 function validateLoginPayload(body) {
   const errors = [];
@@ -135,7 +165,7 @@ async function updateMyProfile(req, res, next) {
       });
     }
 
-    const user = await updateUserProfile(req.auth.userId, value);
+    const user = await updateUserProfile(getAuthInternalUserId(req), value);
 
     if (!user) {
       return res.status(404).json({
@@ -146,14 +176,14 @@ async function updateMyProfile(req, res, next) {
 
     let emailAlert = { status: "skipped", reason: "sendWelcomeMail flag is not true" };
 
-    if (await hasWelcomeEmailBeenSent(user.id)) {
+    if (await hasWelcomeEmailBeenSent(user.internalId)) {
       emailAlert = { status: "skipped", reason: "Welcome email already sent" };
     } else if (value.sendWelcomeMail) {
       emailAlert = await sendWelcomeEmail(user);
     }
 
     if (emailAlert.status === "sent") {
-      const wasMarkedSent = await markWelcomeEmailSent(user.id);
+      const wasMarkedSent = await markWelcomeEmailSent(user.internalId);
       if (wasMarkedSent) {
         user.welcomeEmailSentAt = new Date().toISOString();
       } else {
@@ -177,7 +207,8 @@ async function updateMyProfile(req, res, next) {
 
 async function getMyProfile(req, res, next) {
   try {
-    const user = await findUserById(req.auth.userId);
+    const internalUserId = getAuthInternalUserId(req);
+    const user = await findUserById(internalUserId);
 
     if (!user) {
       return res.status(404).json({
@@ -186,10 +217,16 @@ async function getMyProfile(req, res, next) {
       });
     }
 
+    const cibilReport = await findCibilReportByUserId(internalUserId);
+
     return res.status(200).json({
       status: "success",
       data: {
-        user
+        user: {
+          ...user,
+          cibilScore: cibilReport?.creditScore || null,
+          cibilLastCheckedAt: formatDateTime(cibilReport?.fetchedAt)
+        }
       }
     });
   } catch (error) {
@@ -199,7 +236,8 @@ async function getMyProfile(req, res, next) {
 
 async function getUserLoginEvents(req, res, next) {
   try {
-    const user = await findUserById(req.params.userId);
+    const user = await findUserByPublicId(req.params.userId) ||
+      await findUserById(req.params.userId);
 
     if (!user) {
       return res.status(404).json({
@@ -209,7 +247,7 @@ async function getUserLoginEvents(req, res, next) {
     }
 
     const loginEvents = await listLoginEventsByUserId(
-      req.params.userId,
+      user.internalId,
       req.query.limit
     );
 

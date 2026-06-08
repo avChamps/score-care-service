@@ -5,6 +5,7 @@ const morgan = require("morgan");
 
 const env = require("./config/env");
 const authRoutes = require("./routes/auth.routes");
+const creditReportRoutes = require("./routes/credit-report.routes");
 const healthRoutes = require("./routes/health.routes");
 const userRoutes = require("./routes/user.routes");
 const {
@@ -31,6 +32,7 @@ app.get("/", (_req, res) => {
 });
 
 app.use("/auth", authRoutes);
+app.use("/credit-reports", creditReportRoutes);
 app.use("/health", healthRoutes);
 app.use("/users", userRoutes);
 

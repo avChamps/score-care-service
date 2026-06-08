@@ -35,6 +35,13 @@ const env = {
     password: process.env.SMTP_PASSWORD || "",
     fromName: process.env.SMTP_FROM_NAME || "ScoreCare"
   },
+  surepass: {
+    baseUrl: process.env.SUREPASS_BASE_URL || "https://sandbox.surepass.app",
+    bearerToken: process.env.SUREPASS_BEARER_TOKEN || "",
+    cibilReportPath:
+      process.env.SUREPASS_CIBIL_REPORT_PATH ||
+      "/api/v1/credit-report-cibil/fetch-report-pdf"
+  },
   db: {
     host: process.env.DB_HOST || "localhost",
     port: Number(process.env.DB_PORT || 3306),

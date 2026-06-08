@@ -20,7 +20,7 @@ async function runMigrations() {
       try {
         await pool.query(statement);
       } catch (error) {
-        if (error.code !== "ER_DUP_FIELDNAME") {
+        if (!["ER_DUP_FIELDNAME", "ER_DUP_KEYNAME"].includes(error.code)) {
           throw error;
         }
       }
