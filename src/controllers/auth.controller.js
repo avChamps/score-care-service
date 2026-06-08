@@ -1,5 +1,6 @@
 const {
-  sendMobileOtp
+  sendMobileOtp,
+  verifyMobileOtp
 } = require("../services/msg91.service");
 const env = require("../config/env");
 const {
@@ -8,6 +9,7 @@ const {
 } = require("../models/user.model");
 const { createAuthToken } = require("../services/token.service");
 const {
+  sendUserLoginWhatsappAlert,
   sendUserCreatedWhatsappAlert
 } = require("../services/whatsapp.service");
 
@@ -60,20 +62,14 @@ async function verifyOtp(req, res, next) {
       });
     }
 
-    const allowedOtp = env.msg91.testOtp || "123456";
-
-    if (otp !== allowedOtp) {
-      return res.status(401).json({
-        status: "error",
-        message: "Invalid OTP"
-      });
-    }
-
-    const otpResponse = {
-      type: "success",
-      message: "OTP verified with fixed OTP",
-      testOtp: true
-    };
+    const staticOtp = env.msg91.testOtp || "123456";
+    const otpResponse = otp === staticOtp
+      ? {
+        type: "success",
+        message: "OTP verified with static OTP",
+        staticOtp: true
+      }
+      : await verifyMobileOtp(mobileNumber, otp);
     const {
       user,
       isNewUser
@@ -88,7 +84,11 @@ async function verifyOtp(req, res, next) {
     });
     const whatsappAlert = isNewUser
       ? await sendUserCreatedWhatsappAlert(user)
-      : { status: "skipped", reason: "Existing user login" };
+      : await sendUserLoginWhatsappAlert(user, {
+        loginMethod: "otp",
+        ipAddress: req.ip,
+        deviceId: req.body.deviceId || null
+      });
     const token = createAuthToken({
       userId: user.publicId,
       mobileNumber,

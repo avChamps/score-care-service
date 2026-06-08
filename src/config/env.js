@@ -15,7 +15,7 @@ const env = {
     widgetId: process.env.MSG91_WIDGET_ID || "",
     templateId: process.env.MSG91_TEMPLATE_ID || "",
     otpLength: Number(process.env.MSG91_OTP_LENGTH || 6),
-    testOtp: process.env.MSG91_TEST_OTP || "",
+    testOtp: process.env.MSG91_TEST_OTP || "123456",
     sendOtpUrl:
       process.env.MSG91_SEND_OTP_URL ||
       "https://control.msg91.com/api/v5/otp"

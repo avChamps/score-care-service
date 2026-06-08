@@ -9,6 +9,7 @@ const {
   upsertUserForLogin
 } = require("../models/user.model");
 const {
+  sendUserLoginWhatsappAlert,
   sendUserCreatedWhatsappAlert
 } = require("../services/whatsapp.service");
 const {
@@ -106,7 +107,11 @@ async function recordUserLogin(req, res, next) {
     });
     const whatsappAlert = isNewUser
       ? await sendUserCreatedWhatsappAlert(user)
-      : { status: "skipped", reason: "Existing user login" };
+      : await sendUserLoginWhatsappAlert(user, {
+        loginMethod: value.loginMethod,
+        ipAddress: req.ip,
+        deviceId: value.deviceId
+      });
 
     return res.status(201).json({
       status: "success",

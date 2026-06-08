@@ -49,7 +49,10 @@ npm run db:migrate
 - `GET /users/:userId/login-events` lists login history for a user.
 
 When OTP verification or `/users/login` creates a new user, the service can send
-a WhatsApp alert through Baileys if `WHATSAPP_ALERT_ENABLED=true`.
+a WhatsApp account creation alert through Baileys. Existing-user logins send a
+WhatsApp login alert. Set `WHATSAPP_ALERT_ENABLED=true`, configure
+`WHATSAPP_ALERT_NUMBER` if alerts should go to an admin number instead of the
+user, then run `npm run whatsapp:connect` once to pair the Baileys session.
 When `/users/me/profile` updates a user with an email address, the service sends
 a profile update email alert through the hardcoded GoDaddy SMTP transport.
 
@@ -63,8 +66,8 @@ Example OTP payload:
 
 For backend OTP sending, set `MSG91_TEMPLATE_ID` from the MSG91 OTP section.
 The service sends `MSG91_OTP_LENGTH=6` as `otp_length=6` to MSG91.
-For temporary testing, `MSG91_TEST_OTP=123456` lets `/auth/verify-otp` verify
-without calling MSG91.
+`/auth/verify-otp` accepts `MSG91_TEST_OTP=123456` or verifies the OTP with
+MSG91 before returning an app token.
 
 Example verify OTP payload:
 
@@ -149,4 +152,3 @@ Example login payload:
 }
 ```
 # score-care-service
-
