@@ -44,6 +44,7 @@ npm run db:migrate
 - `POST /auth/verify-otp` verifies OTP through MSG91 and returns an app token.
 - `POST /ai/gemini` sends a message to Google AI Studio Gemini and returns the answer.
 - `POST /credit-reports/cibil` validates user details and fetches a Surepass CIBIL report.
+- `POST /loans/apply` creates a loan application with document uploads.
 - `POST /users/login` creates or updates a user and stores a login event.
 - `PATCH /users/me/profile` updates PAN and full name for the logged-in user.
 - `GET /users/:userId/login-events` lists login history for a user.
@@ -66,6 +67,8 @@ Example OTP payload:
 
 For backend OTP sending, set `MSG91_TEMPLATE_ID` from the MSG91 OTP section.
 The service sends `MSG91_OTP_LENGTH=6` as `otp_length=6` to MSG91.
+Set `MSG91_ENABLED=false` to skip MSG91 sending temporarily and return a mock
+send response. In that mode, verify login with `MSG91_TEST_OTP`.
 `/auth/verify-otp` accepts `MSG91_TEST_OTP=123456` or verifies the OTP with
 MSG91 before returning an app token.
 
@@ -82,6 +85,54 @@ Use the returned token on protected APIs:
 
 ```http
 Authorization: Bearer your_token_here
+```
+
+Example loan application payload uses `multipart/form-data` and requires a
+Bearer token. Uploaded files are stored under
+`{public_id}/files/` inside the configured assets root and returned as public
+asset URLs.
+
+For direct VPS uploads from this API server, configure SFTP credentials in
+`.env`:
+
+```env
+ASSETS_STORAGE_DRIVER=sftp
+ASSETS_PUBLIC_BASE_URL=https://scorecareapp.com/assets
+ASSETS_SFTP_HOST=your-vps-host
+ASSETS_SFTP_PORT=22
+ASSETS_SFTP_USERNAME=your-vps-user
+ASSETS_SFTP_PASSWORD=your-vps-password
+ASSETS_SFTP_PRIVATE_KEY_PATH=
+ASSETS_SFTP_ROOT_DIR=/var/www/scorecare-assets
+```
+
+If the API is running on the same VPS, use `ASSETS_STORAGE_DRIVER=local` and
+`ASSETS_ROOT_DIR=/var/www/scorecare-assets` instead.
+
+Fields:
+
+- `loanAmount`
+- `loanType`
+- `employmentType`
+- `monthlyIncome`
+- `workExperience`
+- `salarySlips` up to 8 image/PDF files
+- `bankStatements` up to 3 image/PDF files
+- `aadhaarCard` up to 2 image/PDF files
+- `panCard` up to 2 image/PDF files
+
+```bash
+curl -X POST http://localhost:5000/loans/apply \
+  -H "Authorization: Bearer your_token_here" \
+  -F "loanAmount=500000" \
+  -F "loanType=personal" \
+  -F "employmentType=salaried" \
+  -F "monthlyIncome=75000" \
+  -F "workExperience=5" \
+  -F "salarySlips=@salary-slip.pdf" \
+  -F "bankStatements=@bank-statement.pdf" \
+  -F "aadhaarCard=@aadhaar-front.pdf" \
+  -F "panCard=@pan-card.pdf"
 ```
 
 Example CIBIL report payload:

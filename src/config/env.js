@@ -11,6 +11,7 @@ const env = {
     expiresIn: process.env.JWT_EXPIRES_IN || "7d"
   },
   msg91: {
+    enabled: process.env.MSG91_ENABLED !== "false",
     authKey: process.env.MSG91_AUTH_KEY || "",
     widgetId: process.env.MSG91_WIDGET_ID || "",
     templateId: process.env.MSG91_TEMPLATE_ID || "",
@@ -19,6 +20,24 @@ const env = {
     sendOtpUrl:
       process.env.MSG91_SEND_OTP_URL ||
       "https://control.msg91.com/api/v5/otp"
+  },
+  assets: {
+    storageDriver: process.env.ASSETS_STORAGE_DRIVER || "local",
+    rootDir: process.env.ASSETS_ROOT_DIR || "/var/www/scorecare-assets",
+    publicBaseUrl:
+      process.env.ASSETS_PUBLIC_BASE_URL ||
+      "https://scorecareapp.com/assets",
+    sftp: {
+      host: process.env.ASSETS_SFTP_HOST || "",
+      port: Number(process.env.ASSETS_SFTP_PORT || 22),
+      username: process.env.ASSETS_SFTP_USERNAME || "",
+      password: process.env.ASSETS_SFTP_PASSWORD || "",
+      privateKeyPath: process.env.ASSETS_SFTP_PRIVATE_KEY_PATH || "",
+      rootDir:
+        process.env.ASSETS_SFTP_ROOT_DIR ||
+        process.env.ASSETS_ROOT_DIR ||
+        "/var/www/scorecare-assets"
+    }
   },
   whatsapp: {
     enabled: process.env.WHATSAPP_ALERT_ENABLED === "true",

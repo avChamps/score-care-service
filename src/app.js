@@ -8,6 +8,7 @@ const aiRoutes = require("./routes/ai.routes");
 const authRoutes = require("./routes/auth.routes");
 const creditReportRoutes = require("./routes/credit-report.routes");
 const healthRoutes = require("./routes/health.routes");
+const loanRoutes = require("./routes/loan.routes");
 const userRoutes = require("./routes/user.routes");
 const {
   errorHandler,
@@ -36,6 +37,7 @@ app.use("/auth", authRoutes);
 app.use("/ai", aiRoutes);
 app.use("/credit-reports", creditReportRoutes);
 app.use("/health", healthRoutes);
+app.use("/loans", loanRoutes);
 app.use("/users", userRoutes);
 
 app.use(notFoundHandler);
