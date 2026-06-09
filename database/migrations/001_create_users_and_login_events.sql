@@ -5,6 +5,7 @@ CREATE TABLE IF NOT EXISTS users (
   full_name VARCHAR(150) NULL,
   email VARCHAR(255) NULL,
   date_of_birth DATE NULL,
+  is_admin TINYINT(1) NOT NULL DEFAULT 0,
   status ENUM('active', 'inactive', 'blocked') NOT NULL DEFAULT 'active',
   last_login_at DATETIME NULL,
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
