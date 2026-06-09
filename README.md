@@ -43,11 +43,27 @@ npm run db:migrate
 - `POST /auth/send-otp` sends a mobile OTP through MSG91.
 - `POST /auth/verify-otp` verifies OTP through MSG91 and returns an app token.
 - `POST /ai/gemini` sends a message to Google AI Studio Gemini and returns the answer.
+- `POST /ai/gemini/stream` streams a Google AI Studio Gemini answer over SSE.
 - `POST /credit-reports/cibil` validates user details and fetches a Surepass CIBIL report.
 - `POST /loans/apply` creates a loan application with document uploads.
+- `GET /notifications` lists notifications for the authenticated user.
+- `POST /notifications/:notificationId/read` marks one notification as read.
+- `POST /notifications/read-all` marks all authenticated user notifications as read.
 - `POST /users/login` creates or updates a user and stores a login event.
 - `PATCH /users/me/profile` updates PAN and full name for the logged-in user.
 - `GET /users/:userId/login-events` lists login history for a user.
+
+Example Gemini SSE request:
+
+```bash
+curl -N -X POST http://localhost:5000/ai/gemini/stream \
+  -H "Content-Type: application/json" \
+  -d '{"message":"Explain credit utilization in simple words"}'
+```
+
+The SSE stream emits `metadata`, `chunk`, `done`, and `error` events. Append
+each `chunk` event's `text` value in the frontend to render the answer while
+Gemini is generating it.
 
 When OTP verification or `/users/login` creates a new user, the service can send
 a WhatsApp account creation alert through Baileys. Existing-user logins send a
@@ -133,6 +149,51 @@ curl -X POST http://localhost:5000/loans/apply \
   -F "bankStatements=@bank-statement.pdf" \
   -F "aadhaarCard=@aadhaar-front.pdf" \
   -F "panCard=@pan-card.pdf"
+```
+
+## Notifications
+
+Loan applications automatically create a `loan_applied` notification for the
+authenticated user.
+
+Monthly CIBIL report notifications are scheduled by default for 9:00 AM on the
+1st day of every month in `Asia/Kolkata`.
+
+```env
+MONTHLY_CIBIL_NOTIFICATION_ENABLED=true
+MONTHLY_CIBIL_NOTIFICATION_CRON=0 9 1 * *
+NOTIFICATION_TIMEZONE=Asia/Kolkata
+```
+
+The monthly job creates one `cibil_report_updated` notification per user with a
+saved Surepass CIBIL report. Duplicate monthly notifications are prevented by a
+unique notification key.
+
+Run the monthly job manually:
+
+```bash
+npm run notifications:cibil-monthly
+```
+
+Get notifications:
+
+```http
+GET /notifications?limit=20&offset=0&unreadOnly=false
+Authorization: Bearer your_token_here
+```
+
+Mark one notification as read:
+
+```http
+POST /notifications/123/read
+Authorization: Bearer your_token_here
+```
+
+Mark all notifications as read:
+
+```http
+POST /notifications/read-all
+Authorization: Bearer your_token_here
 ```
 
 Example CIBIL report payload:

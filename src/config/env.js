@@ -39,6 +39,13 @@ const env = {
         "/var/www/scorecare-assets"
     }
   },
+  notifications: {
+    monthlyCibilEnabled:
+      process.env.MONTHLY_CIBIL_NOTIFICATION_ENABLED !== "false",
+    monthlyCibilCron:
+      process.env.MONTHLY_CIBIL_NOTIFICATION_CRON || "0 9 1 * *",
+    timezone: process.env.NOTIFICATION_TIMEZONE || "Asia/Kolkata"
+  },
   whatsapp: {
     enabled: process.env.WHATSAPP_ALERT_ENABLED === "true",
     alertNumber: (process.env.WHATSAPP_ALERT_NUMBER || "").trim(),

@@ -3,6 +3,9 @@ const {
   findLatestLoanApplicationByUserId
 } = require("../models/loan-application.model");
 const {
+  createLoanAppliedNotification
+} = require("../models/notification.model");
+const {
   deleteSavedFiles,
   getPublicIdFromRequest,
   saveUploadedFiles
@@ -135,6 +138,19 @@ async function applyLoan(req, res, next) {
         documents
       }
     );
+    let notification = null;
+
+    try {
+      notification = await createLoanAppliedNotification(
+        req.auth.internalUserId,
+        loanApplication
+      );
+    } catch (notificationError) {
+      notification = {
+        status: "failed",
+        message: notificationError.message
+      };
+    }
 
     return res.status(201).json({
       status: "success",
@@ -142,7 +158,8 @@ async function applyLoan(req, res, next) {
       message: "Loan application submitted successfully",
       data: {
         loanApplication,
-        documents
+        documents,
+        notification
       }
     });
   } catch (error) {

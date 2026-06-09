@@ -8,15 +8,17 @@ function wait(ms) {
   });
 }
 
-function buildGeminiUrl(model) {
+function buildGeminiUrl(model, action = "generateContent", params = {}) {
   const baseUrl = env.gemini.baseUrl.replace(/\/+$/, "");
   const normalizedModel = String(model || env.gemini.model).replace(
     /^models\//,
     ""
   );
   const encodedModel = encodeURIComponent(normalizedModel);
+  const query = new URLSearchParams(params).toString();
+  const suffix = query ? `?${query}` : "";
 
-  return `${baseUrl}/models/${encodedModel}:generateContent`;
+  return `${baseUrl}/models/${encodedModel}:${action}${suffix}`;
 }
 
 function normalizeContents({ message, history = [] }) {
@@ -40,6 +42,41 @@ function extractText(responseBody) {
     .filter(Boolean)
     .join("\n")
     .trim();
+}
+
+function extractTextChunk(responseBody) {
+  return (responseBody.candidates || [])
+    .flatMap((candidate) => candidate.content?.parts || [])
+    .map((part) => part.text)
+    .filter(Boolean)
+    .join("");
+}
+
+function buildGeminiPayload({
+  message,
+  history,
+  temperature,
+  maxOutputTokens
+}) {
+  const generationConfig = {};
+
+  if (temperature !== undefined) {
+    generationConfig.temperature = temperature;
+  }
+
+  if (maxOutputTokens !== undefined) {
+    generationConfig.maxOutputTokens = maxOutputTokens;
+  }
+
+  const payload = {
+    contents: normalizeContents({ message, history })
+  };
+
+  if (Object.keys(generationConfig).length > 0) {
+    payload.generationConfig = generationConfig;
+  }
+
+  return payload;
 }
 
 function buildGeminiError(response, responseBody) {
@@ -98,6 +135,57 @@ async function requestGemini({ model, payload }) {
   throw lastError;
 }
 
+async function parseGeminiErrorResponse(response) {
+  const responseText = await response.text().catch(() => "");
+  let responseBody = {};
+
+  if (responseText) {
+    try {
+      responseBody = JSON.parse(responseText);
+    } catch (_error) {
+      responseBody = { error: { message: responseText } };
+    }
+  }
+
+  return buildGeminiError(response, responseBody);
+}
+
+async function* readGeminiSse(response) {
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let dataLines = [];
+
+  for await (const chunk of response.body) {
+    buffer += decoder.decode(chunk, { stream: true });
+    const lines = buffer.split(/\r?\n/);
+    buffer = lines.pop() || "";
+
+    for (const line of lines) {
+      if (!line) {
+        if (dataLines.length > 0) {
+          yield dataLines.join("\n");
+          dataLines = [];
+        }
+        continue;
+      }
+
+      if (line.startsWith("data:")) {
+        dataLines.push(line.slice(5).trimStart());
+      }
+    }
+  }
+
+  buffer += decoder.decode();
+
+  if (buffer.startsWith("data:")) {
+    dataLines.push(buffer.slice(5).trimStart());
+  }
+
+  if (dataLines.length > 0) {
+    yield dataLines.join("\n");
+  }
+}
+
 async function generateGeminiAnswer({
   message,
   history,
@@ -111,23 +199,12 @@ async function generateGeminiAnswer({
     throw error;
   }
 
-  const generationConfig = {};
-
-  if (temperature !== undefined) {
-    generationConfig.temperature = temperature;
-  }
-
-  if (maxOutputTokens !== undefined) {
-    generationConfig.maxOutputTokens = maxOutputTokens;
-  }
-
-  const payload = {
-    contents: normalizeContents({ message, history })
-  };
-
-  if (Object.keys(generationConfig).length > 0) {
-    payload.generationConfig = generationConfig;
-  }
+  const payload = buildGeminiPayload({
+    message,
+    history,
+    temperature,
+    maxOutputTokens
+  });
 
   const responseBody = await requestGemini({ model, payload });
 
@@ -147,6 +224,77 @@ async function generateGeminiAnswer({
   };
 }
 
+async function* streamGeminiAnswer({
+  message,
+  history,
+  model,
+  temperature,
+  maxOutputTokens,
+  signal
+}) {
+  if (!env.gemini.apiKey) {
+    const error = new Error("Gemini API key is required");
+    error.statusCode = 503;
+    throw error;
+  }
+
+  const payload = buildGeminiPayload({
+    message,
+    history,
+    temperature,
+    maxOutputTokens
+  });
+
+  let response;
+
+  try {
+    response = await fetch(
+      buildGeminiUrl(model, "streamGenerateContent", { alt: "sse" }),
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": env.gemini.apiKey
+        },
+        body: JSON.stringify(payload),
+        signal
+      }
+    );
+  } catch (fetchError) {
+    if (signal?.aborted) {
+      return;
+    }
+
+    const error = new Error("Unable to connect to Gemini API");
+    error.statusCode = 502;
+    error.details = fetchError.cause?.message || fetchError.message;
+    throw error;
+  }
+
+  if (!response.ok) {
+    throw await parseGeminiErrorResponse(response);
+  }
+
+  for await (const eventData of readGeminiSse(response)) {
+    if (eventData === "[DONE]") {
+      return;
+    }
+
+    const responseBody = JSON.parse(eventData);
+
+    if (responseBody.error) {
+      throw buildGeminiError(response, responseBody);
+    }
+
+    yield {
+      text: extractTextChunk(responseBody),
+      raw: responseBody,
+      usageMetadata: responseBody.usageMetadata || null
+    };
+  }
+}
+
 module.exports = {
-  generateGeminiAnswer
+  generateGeminiAnswer,
+  streamGeminiAnswer
 };

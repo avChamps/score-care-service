@@ -1,5 +1,6 @@
 const {
-  generateGeminiAnswer
+  generateGeminiAnswer,
+  streamGeminiAnswer
 } = require("../services/gemini.service");
 const {
   createAiPromptMessage
@@ -129,6 +130,99 @@ async function askGemini(req, res, next) {
   }
 }
 
+function writeSseEvent(res, event, data) {
+  res.write(`event: ${event}\n`);
+  res.write(`data: ${JSON.stringify(data)}\n\n`);
+}
+
+async function streamGemini(req, res, next) {
+  const abortController = new AbortController();
+  let streamStarted = false;
+
+  res.on("close", () => {
+    if (!res.writableEnded) {
+      abortController.abort();
+    }
+  });
+
+  try {
+    const { errors, value } = validateGeminiPayload(req.body || {});
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        status: "error",
+        errors
+      });
+    }
+
+    const promptMessageId = await savePromptMessage(req, value);
+
+    res.status(200);
+    res.set({
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no"
+    });
+    res.flushHeaders?.();
+    streamStarted = true;
+
+    writeSseEvent(res, "metadata", {
+      status: "streaming",
+      model: value.model,
+      promptMessageId
+    });
+
+    let answer = "";
+    let usageMetadata = null;
+
+    for await (const chunk of streamGeminiAnswer({
+      ...value,
+      signal: abortController.signal
+    })) {
+      if (abortController.signal.aborted) {
+        return;
+      }
+
+      if (chunk.text) {
+        answer += chunk.text;
+        writeSseEvent(res, "chunk", { text: chunk.text });
+      }
+
+      if (chunk.usageMetadata) {
+        usageMetadata = chunk.usageMetadata;
+      }
+    }
+
+    writeSseEvent(res, "done", {
+      status: "success",
+      answer,
+      usageMetadata,
+      promptMessageId
+    });
+    return res.end();
+  } catch (error) {
+    if (abortController.signal.aborted) {
+      return;
+    }
+
+    if (streamStarted) {
+      writeSseEvent(res, "error", {
+        status: "error",
+        message: error.message,
+        details:
+          process.env.NODE_ENV === "production"
+            ? undefined
+            : error.details || error.message
+      });
+      return res.end();
+    }
+
+    return next(error);
+  }
+}
+
 module.exports = {
-  askGemini
+  askGemini,
+  streamGemini
 };
