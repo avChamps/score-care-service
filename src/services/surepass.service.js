@@ -7,7 +7,7 @@ function buildSurepassUrl(path) {
   return `${baseUrl}${normalizedPath}`;
 }
 
-async function fetchCibilCreditReport(payload) {
+async function postSurepass(path, payload, errorMessage) {
   if (!env.surepass.bearerToken) {
     const error = new Error("Surepass bearer token is required");
     error.statusCode = 503;
@@ -17,7 +17,7 @@ async function fetchCibilCreditReport(payload) {
   let response;
 
   try {
-    response = await fetch(buildSurepassUrl(env.surepass.cibilReportPath), {
+    response = await fetch(buildSurepassUrl(path), {
       method: "POST",
       headers: {
         Authorization: `Bearer ${env.surepass.bearerToken}`,
@@ -36,7 +36,7 @@ async function fetchCibilCreditReport(payload) {
 
   if (!response.ok || responseBody.success === false) {
     const error = new Error(
-      responseBody.message || "Failed to fetch CIBIL report from Surepass"
+      responseBody.message || errorMessage
     );
     error.statusCode = response.ok ? 502 : response.status;
     error.details = responseBody;
@@ -46,6 +46,32 @@ async function fetchCibilCreditReport(payload) {
   return responseBody;
 }
 
+async function fetchCibilCreditReport(payload) {
+  return postSurepass(
+    env.surepass.cibilReportPath,
+    payload,
+    "Failed to fetch CIBIL report from Surepass"
+  );
+}
+
+async function fetchExperianCreditScore(payload) {
+  return postSurepass(
+    env.surepass.experianScorePath,
+    payload,
+    "Failed to fetch Experian credit score from Surepass"
+  );
+}
+
+async function fetchExperianCreditReport(payload) {
+  return postSurepass(
+    env.surepass.experianReportPath,
+    payload,
+    "Failed to fetch Experian credit report from Surepass"
+  );
+}
+
 module.exports = {
-  fetchCibilCreditReport
+  fetchCibilCreditReport,
+  fetchExperianCreditReport,
+  fetchExperianCreditScore
 };

@@ -16,8 +16,11 @@ const {
   sendWelcomeEmail
 } = require("../services/profile-email.service");
 const {
-  findCibilReportByUserId
+  findExperianScoreByUserId
 } = require("../models/credit-report.model");
+const {
+  createFreeTierCreatedNotification
+} = require("../models/notification.model");
 
 const mobilePattern = /^[6-9]\d{9}$/;
 const panPattern = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
@@ -112,6 +115,9 @@ async function recordUserLogin(req, res, next) {
         ipAddress: req.ip,
         deviceId: value.deviceId
       });
+    const freeTierNotification = isNewUser
+      ? await createFreeTierCreatedNotification(user.internalId)
+      : null;
 
     return res.status(201).json({
       status: "success",
@@ -119,6 +125,7 @@ async function recordUserLogin(req, res, next) {
         user,
         loginEventId,
         isNewUser,
+        freeTierNotification,
         whatsappAlert
       }
     });
@@ -222,15 +229,16 @@ async function getMyProfile(req, res, next) {
       });
     }
 
-    const cibilReport = await findCibilReportByUserId(internalUserId);
+    const experianScore = await findExperianScoreByUserId(internalUserId);
 
     return res.status(200).json({
       status: "success",
       data: {
         user: {
           ...user,
-          cibilScore: cibilReport?.creditScore || null,
-          cibilLastCheckedAt: formatDateTime(cibilReport?.fetchedAt)
+          creditScore: experianScore?.creditScore || null,
+          creditScoreSource: experianScore ? "experian" : null,
+          creditScoreLastCheckedAt: formatDateTime(experianScore?.fetchedAt)
         }
       }
     });

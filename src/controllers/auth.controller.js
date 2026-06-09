@@ -12,6 +12,9 @@ const {
   sendUserLoginWhatsappAlert,
   sendUserCreatedWhatsappAlert
 } = require("../services/whatsapp.service");
+const {
+  createFreeTierCreatedNotification
+} = require("../models/notification.model");
 
 const mobilePattern = /^[6-9]\d{9}$/;
 const otpPattern = /^\d{4,9}$/;
@@ -89,6 +92,9 @@ async function verifyOtp(req, res, next) {
         ipAddress: req.ip,
         deviceId: req.body.deviceId || null
       });
+    const freeTierNotification = isNewUser
+      ? await createFreeTierCreatedNotification(user.internalId)
+      : null;
     const token = createAuthToken({
       userId: user.publicId,
       mobileNumber,
@@ -112,6 +118,7 @@ async function verifyOtp(req, res, next) {
         nextStep,
         shouldShowPanDetailsForm: !profileComplete,
         loginEventId,
+        freeTierNotification,
         whatsappAlert,
         otpProvider: otpResponse
       }

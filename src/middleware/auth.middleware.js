@@ -75,7 +75,21 @@ async function optionalAuth(req, _res, next) {
   return next();
 }
 
+async function requireAdmin(req, res, next) {
+  const user = await findUserById(req.auth.internalUserId);
+
+  if (!user?.isAdmin) {
+    return res.status(403).json({
+      status: "error",
+      message: "Admin access is required"
+    });
+  }
+
+  return next();
+}
+
 module.exports = {
   optionalAuth,
+  requireAdmin,
   requireAuth
 };

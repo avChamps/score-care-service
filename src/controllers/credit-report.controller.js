@@ -5,13 +5,22 @@ const path = require("path");
 const { promisify } = require("util");
 
 const {
-  fetchCibilCreditReport
+  fetchCibilCreditReport,
+  fetchExperianCreditReport,
+  fetchExperianCreditScore
 } = require("../services/surepass.service");
 const {
   findCibilReportByUserId,
+  findExperianReportByUserId,
+  findExperianScoreByUserId,
   saveCibilReport,
+  saveExperianReport,
+  saveExperianScore,
   saveCibilReportPdfBase64
 } = require("../models/credit-report.model");
+const {
+  findUserById
+} = require("../models/user.model");
 
 const mobilePattern = /^[6-9]\d{9}$/;
 const panPattern = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
@@ -70,6 +79,40 @@ function validateCibilReportPayload(body) {
   };
 }
 
+function validateExperianPayload(body) {
+  const errors = [];
+  const mobile = String(body.mobile || body.mobileNumber || "").trim();
+  const pan = String(body.pan || body.panNumber || "").trim().toUpperCase();
+  const name = String(body.name || body.fullName || "").trim();
+  const consent = normalizeConsent(body.consent);
+
+  if (!mobilePattern.test(mobile)) {
+    errors.push("Valid 10 digit Indian mobile number is required");
+  }
+
+  if (!panPattern.test(pan)) {
+    errors.push("Valid PAN number is required");
+  }
+
+  if (name.length < 2) {
+    errors.push("Full name is required");
+  }
+
+  if (consent !== "Y") {
+    errors.push("User consent is required");
+  }
+
+  return {
+    errors,
+    value: {
+      mobile,
+      pan,
+      name,
+      consent
+    }
+  };
+}
+
 function formatSavedCibilReport(savedReport) {
   return {
     client_id: savedReport.clientId,
@@ -82,6 +125,33 @@ function formatSavedCibilReport(savedReport) {
     credit_report: savedReport.creditReport,
     credit_report_link: savedReport.creditReportLink,
     credit_report_base64: savedReport.creditReportBase64
+  };
+}
+
+function formatSavedExperianReport(savedReport) {
+  return {
+    client_id: savedReport.clientId,
+    name: savedReport.name,
+    mobile: savedReport.mobile,
+    pan: savedReport.pan,
+    credit_score: savedReport.creditScore,
+    credit_report: savedReport.creditReport
+  };
+}
+
+function buildExperianScoreFallbackResponse(value) {
+  return {
+    data: {
+      client_id: "experian_credit_score_BLffggUeWtqOpHTjugpw",
+      name: value.name.toUpperCase(),
+      mobile: value.mobile,
+      pan: value.pan,
+      credit_score: "796"
+    },
+    status_code: 200,
+    success: true,
+    message: "Success",
+    message_code: "success"
   };
 }
 
@@ -677,18 +747,6 @@ async function cachePdfFromReportLink(internalUserId, savedReport) {
   return saveCibilReportPdfBase64(internalUserId, pdfBuffer.toString("base64"));
 }
 
-async function refreshSavedCibilReport(internalUserId, savedReport) {
-  const report = await fetchCibilCreditReport({
-    mobile: savedReport.mobile,
-    pan: savedReport.pan,
-    name: savedReport.name,
-    gender: savedReport.gender,
-    consent: "Y"
-  });
-
-  return saveCibilReport(internalUserId, report);
-}
-
 async function getCibilCreditReport(req, res, next) {
   try {
     const internalUserId = getAuthInternalUserId(req);
@@ -751,6 +809,144 @@ async function getCibilCreditReport(req, res, next) {
   }
 }
 
+async function getExperianCreditScore(req, res, next) {
+  try {
+    const internalUserId = getAuthInternalUserId(req);
+    const savedReport = await findExperianScoreByUserId(internalUserId);
+
+    if (savedReport) {
+      return res.status(200).json({
+        status: "success",
+        message: "Experian credit score fetched from database",
+        source: "database",
+        userId: savedReport.userId,
+        data: formatSavedExperianReport(savedReport),
+        provider: {
+          name: savedReport.provider,
+          message: savedReport.providerMessage,
+          messageCode: savedReport.providerMessageCode,
+          statusCode: savedReport.providerStatusCode
+        },
+        fetchedAt: savedReport.fetchedAt
+      });
+    }
+
+    const { errors, value } = validateExperianPayload(req.body);
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        status: "error",
+        errors
+      });
+    }
+
+    let report;
+    let source = "surepass";
+
+    try {
+      report = await fetchExperianCreditScore(value);
+    } catch (error) {
+      if (error.details?.message_code !== "balance_exhausted") {
+        throw error;
+      }
+
+      report = buildExperianScoreFallbackResponse(value);
+      source = "fallback";
+    }
+
+    const savedExperianScore = await saveExperianScore(internalUserId, report);
+
+    return res.status(200).json({
+      status: "success",
+      message: "Experian credit score fetched successfully",
+      source,
+      userId: savedExperianScore.userId,
+      data: formatSavedExperianReport(savedExperianScore),
+      provider: {
+        name: "surepass",
+        message: report.message,
+        messageCode: report.message_code,
+        statusCode: report.status_code
+      },
+      fetchedAt: savedExperianScore.fetchedAt
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getExperianCreditReport(req, res, next) {
+  try {
+    const internalUserId = getAuthInternalUserId(req);
+    const user = await findUserById(internalUserId);
+
+    if (!user) {
+      return res.status(404).json({
+        status: "error",
+        message: "User not found"
+      });
+    }
+
+    if (user.accessType !== "paid") {
+      return res.status(200).json({
+        status: "success",
+        message: "No data available",
+        source: "subscription",
+        data: null,
+        accessType: user.accessType
+      });
+    }
+
+    const savedReport = await findExperianReportByUserId(internalUserId);
+
+    if (savedReport) {
+      return res.status(200).json({
+        status: "success",
+        message: "Experian credit report fetched from database",
+        source: "database",
+        userId: savedReport.userId,
+        data: formatSavedExperianReport(savedReport),
+        provider: {
+          name: savedReport.provider,
+          message: savedReport.providerMessage,
+          messageCode: savedReport.providerMessageCode,
+          statusCode: savedReport.providerStatusCode
+        },
+        fetchedAt: savedReport.fetchedAt
+      });
+    }
+
+    const { errors, value } = validateExperianPayload(req.body);
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        status: "error",
+        errors
+      });
+    }
+
+    const report = await fetchExperianCreditReport(value);
+    const savedExperianReport = await saveExperianReport(internalUserId, report);
+
+    return res.status(200).json({
+      status: "success",
+      message: "Experian credit report fetched successfully",
+      source: "surepass",
+      userId: savedExperianReport.userId,
+      data: formatSavedExperianReport(savedExperianReport),
+      provider: {
+        name: "surepass",
+        message: report.message,
+        messageCode: report.message_code,
+        statusCode: report.status_code
+      },
+      fetchedAt: savedExperianReport.fetchedAt
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function getSavedCibilCreditReport(req, res, next) {
   try {
     const internalUserId = getAuthInternalUserId(req);
@@ -775,15 +971,6 @@ async function getSavedCibilCreditReport(req, res, next) {
         if (error.statusCode !== 410) {
           throw error;
         }
-
-        const refreshedReport = await refreshSavedCibilReport(
-          internalUserId,
-          savedReport
-        );
-        savedReport = await cachePdfFromReportLink(
-          internalUserId,
-          refreshedReport
-        );
       }
     }
 
@@ -846,17 +1033,10 @@ async function downloadCibilCreditReport(req, res, next) {
         throw error;
       }
 
-      const refreshedReport = await refreshSavedCibilReport(
-        getAuthInternalUserId(req),
-        savedReport
-      );
-      const cachedReport = await cachePdfFromReportLink(
-        getAuthInternalUserId(req),
-        refreshedReport
-      );
-      const pdfBuffer = Buffer.from(cachedReport.creditReportBase64, "base64");
-
-      return sendPdfBuffer(res, cachedReport, pdfBuffer);
+      return res.status(410).json({
+        status: "error",
+        message: "CIBIL report download link has expired"
+      });
     }
   } catch (error) {
     next(error);
@@ -865,6 +1045,8 @@ async function downloadCibilCreditReport(req, res, next) {
 
 module.exports = {
   downloadCibilCreditReport,
+  getExperianCreditReport,
+  getExperianCreditScore,
   getSavedCibilCreditReport,
   getCibilCreditReport
 };

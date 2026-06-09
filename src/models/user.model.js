@@ -15,6 +15,11 @@ function mapUser(row) {
     email: row.email,
     dateOfBirth: row.dateOfBirth,
     isAdmin: Boolean(row.isAdmin),
+    accessType: row.accessType,
+    subscriptionStatus: row.subscriptionStatus,
+    subscriptionStartedAt: row.subscriptionStartedAt,
+    subscriptionDueAt: row.subscriptionDueAt,
+    subscriptionEndsAt: row.subscriptionEndsAt,
     status: row.status,
     lastLoginAt: row.lastLoginAt,
     createdAt: row.createdAt,
@@ -40,6 +45,16 @@ async function findUserById(id) {
       email,
       date_of_birth AS dateOfBirth,
       is_admin AS isAdmin,
+      CASE
+        WHEN subscription_status = 'active'
+          AND (subscription_due_at IS NULL OR subscription_due_at >= NOW())
+        THEN 'paid'
+        ELSE 'free'
+      END AS accessType,
+      subscription_status AS subscriptionStatus,
+      subscription_started_at AS subscriptionStartedAt,
+      subscription_due_at AS subscriptionDueAt,
+      subscription_ends_at AS subscriptionEndsAt,
       status,
       last_login_at AS lastLoginAt,
       created_at AS createdAt,
@@ -63,6 +78,16 @@ async function findUserByPublicId(publicId) {
       email,
       date_of_birth AS dateOfBirth,
       is_admin AS isAdmin,
+      CASE
+        WHEN subscription_status = 'active'
+          AND (subscription_due_at IS NULL OR subscription_due_at >= NOW())
+        THEN 'paid'
+        ELSE 'free'
+      END AS accessType,
+      subscription_status AS subscriptionStatus,
+      subscription_started_at AS subscriptionStartedAt,
+      subscription_due_at AS subscriptionDueAt,
+      subscription_ends_at AS subscriptionEndsAt,
       status,
       last_login_at AS lastLoginAt,
       created_at AS createdAt,

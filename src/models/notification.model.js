@@ -94,6 +94,18 @@ async function createLoanAppliedNotification(userId, loanApplication) {
   });
 }
 
+async function createFreeTierCreatedNotification(userId) {
+  return createNotification(userId, {
+    type: "free_tier_created",
+    title: "Free tier activated",
+    message: "Your free tier account is ready. Subscribe to unlock more benefits.",
+    notificationKey: "free_tier_created",
+    data: {
+      accessType: "free"
+    }
+  });
+}
+
 async function createMonthlyCibilReportNotifications(monthKey) {
   const [result] = await pool.query(
     `INSERT INTO notifications (
@@ -249,6 +261,7 @@ async function markAllNotificationsReadByUserPublicId(userPublicId) {
 
 module.exports = {
   countUnreadNotificationsByUserPublicId,
+  createFreeTierCreatedNotification,
   createLoanAppliedNotification,
   createMonthlyCibilReportNotifications,
   createNotification,

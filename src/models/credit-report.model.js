@@ -50,7 +50,7 @@ function mapCreditReport(row) {
   return report;
 }
 
-async function findCibilReportByUserId(userId) {
+async function findCreditReportByUserId(userId, reportType) {
   const [rows] = await pool.query(
     `SELECT
       id,
@@ -78,15 +78,27 @@ async function findCibilReportByUserId(userId) {
     FROM credit_reports
     WHERE user_id = ?
       AND provider = 'surepass'
-      AND report_type = 'cibil_pdf'
+      AND report_type = ?
     LIMIT 1`,
-    [userId]
+    [userId, reportType]
   );
 
   return mapCreditReport(rows[0]);
 }
 
-async function saveCibilReport(userId, surepassResponse) {
+async function findCibilReportByUserId(userId) {
+  return findCreditReportByUserId(userId, "cibil_pdf");
+}
+
+async function findExperianScoreByUserId(userId) {
+  return findCreditReportByUserId(userId, "experian_score");
+}
+
+async function findExperianReportByUserId(userId) {
+  return findCreditReportByUserId(userId, "experian_report");
+}
+
+async function saveSurepassCreditReport(userId, reportType, surepassResponse) {
   const data = surepassResponse.data || {};
   const [userRows] = await pool.query(
     "SELECT public_id AS publicId FROM users WHERE id = ?",
@@ -122,7 +134,7 @@ async function saveCibilReport(userId, surepassResponse) {
       provider_response,
       fetched_at
     )
-    VALUES (?, ?, 'surepass', 'cibil_pdf', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
+    VALUES (?, ?, 'surepass', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())
     ON DUPLICATE KEY UPDATE
       user_public_id = VALUES(user_public_id),
       client_id = VALUES(client_id),
@@ -144,6 +156,7 @@ async function saveCibilReport(userId, surepassResponse) {
     [
       userId,
       userPublicId,
+      reportType,
       data.client_id,
       data.name || null,
       data.mobile || null,
@@ -161,7 +174,19 @@ async function saveCibilReport(userId, surepassResponse) {
     ]
   );
 
-  return findCibilReportByUserId(userId);
+  return findCreditReportByUserId(userId, reportType);
+}
+
+async function saveCibilReport(userId, surepassResponse) {
+  return saveSurepassCreditReport(userId, "cibil_pdf", surepassResponse);
+}
+
+async function saveExperianScore(userId, surepassResponse) {
+  return saveSurepassCreditReport(userId, "experian_score", surepassResponse);
+}
+
+async function saveExperianReport(userId, surepassResponse) {
+  return saveSurepassCreditReport(userId, "experian_report", surepassResponse);
 }
 
 async function saveCibilReportPdfBase64(userId, creditReportBase64) {
@@ -181,6 +206,10 @@ async function saveCibilReportPdfBase64(userId, creditReportBase64) {
 
 module.exports = {
   findCibilReportByUserId,
+  findExperianReportByUserId,
+  findExperianScoreByUserId,
   saveCibilReport,
+  saveExperianReport,
+  saveExperianScore,
   saveCibilReportPdfBase64
 };

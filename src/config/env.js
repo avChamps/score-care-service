@@ -62,11 +62,17 @@ const env = {
     fromName: process.env.SMTP_FROM_NAME || "ScoreCare"
   },
   surepass: {
-    baseUrl: process.env.SUREPASS_BASE_URL || "https://sandbox.surepass.app",
+    baseUrl: process.env.SUREPASS_BASE_URL || "https://sandbox.surepass.io",
     bearerToken: process.env.SUREPASS_BEARER_TOKEN || "",
     cibilReportPath:
       process.env.SUREPASS_CIBIL_REPORT_PATH ||
-      "/api/v1/credit-report-cibil/fetch-report-pdf"
+      "/api/v1/credit-report-cibil/fetch-report-pdf",
+    experianScorePath:
+      process.env.SUREPASS_EXPERIAN_SCORE_PATH ||
+      "/api/v1/credit-report-experian/score",
+    experianReportPath:
+      process.env.SUREPASS_EXPERIAN_REPORT_PATH ||
+      "/api/v1/credit-report-experian/fetch-report"
   },
   gemini: {
     apiKey: process.env.GEMINI_API_KEY || "",
