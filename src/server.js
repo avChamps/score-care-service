@@ -1,6 +1,7 @@
 const app = require("./app");
 const { checkDatabaseConnection } = require("./config/db");
 const env = require("./config/env");
+const { startNotificationScheduler } = require("./services/notification-scheduler.service");
 
 async function startServer() {
   try {
@@ -12,6 +13,7 @@ async function startServer() {
 
   app.listen(env.port, () => {
     console.log(`ScoreCare service running on port ${env.port}`);
+    startNotificationScheduler();
   });
 }
 

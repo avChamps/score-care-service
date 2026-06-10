@@ -4,8 +4,13 @@ const helmet = require("helmet");
 const morgan = require("morgan");
 
 const env = require("./config/env");
+const adminRoutes = require("./routes/admin.routes");
+const aiRoutes = require("./routes/ai.routes");
 const authRoutes = require("./routes/auth.routes");
+const creditReportRoutes = require("./routes/credit-report.routes");
 const healthRoutes = require("./routes/health.routes");
+const loanRoutes = require("./routes/loan.routes");
+const notificationRoutes = require("./routes/notification.routes");
 const userRoutes = require("./routes/user.routes");
 const {
   errorHandler,
@@ -31,7 +36,12 @@ app.get("/", (_req, res) => {
 });
 
 app.use("/auth", authRoutes);
+app.use("/admin", adminRoutes);
+app.use("/ai", aiRoutes);
+app.use("/credit-reports", creditReportRoutes);
 app.use("/health", healthRoutes);
+app.use("/loans", loanRoutes);
+app.use("/notifications", notificationRoutes);
 app.use("/users", userRoutes);
 
 app.use(notFoundHandler);

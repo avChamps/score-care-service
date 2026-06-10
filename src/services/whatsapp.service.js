@@ -69,6 +69,21 @@ function buildUserCreatedAlert(user) {
   ].join("\n");
 }
 
+function buildUserLoginAlert(user, login = {}) {
+  return [
+    "ScoreCare user login alert",
+    "",
+    `User ID: ${user.id}`,
+    `Mobile: ${user.mobileNumber}`,
+    `Name: ${user.fullName || "Not updated"}`,
+    `PAN: ${user.panNumber || "Not updated"}`,
+    `Login method: ${login.loginMethod || "otp"}`,
+    `IP: ${login.ipAddress || "Not available"}`,
+    `Device ID: ${login.deviceId || "Not available"}`,
+    `Logged in: ${login.loggedInAt || new Date().toISOString()}`
+  ].join("\n");
+}
+
 async function startWhatsApp() {
   if (isStarting) {
     return sock;
@@ -168,7 +183,14 @@ async function sendUserCreatedWhatsappAlert(user) {
   return sendWhatsappMessage(toNumber, buildUserCreatedAlert(user));
 }
 
+async function sendUserLoginWhatsappAlert(user, login) {
+  const toNumber = env.whatsapp.alertNumber || user.mobileNumber;
+
+  return sendWhatsappMessage(toNumber, buildUserLoginAlert(user, login));
+}
+
 module.exports = {
+  sendUserLoginWhatsappAlert,
   sendUserCreatedWhatsappAlert,
   startWhatsApp
 };

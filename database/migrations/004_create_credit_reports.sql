@@ -1,0 +1,30 @@
+CREATE TABLE IF NOT EXISTS credit_reports (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  provider VARCHAR(50) NOT NULL DEFAULT 'surepass',
+  report_type VARCHAR(50) NOT NULL DEFAULT 'cibil_pdf',
+  client_id VARCHAR(120) NOT NULL,
+  name VARCHAR(150) NULL,
+  mobile VARCHAR(15) NULL,
+  pan VARCHAR(10) NULL,
+  gender VARCHAR(20) NULL,
+  user_email VARCHAR(255) NULL,
+  credit_score VARCHAR(10) NULL,
+  credit_report JSON NULL,
+  credit_report_link TEXT NULL,
+  credit_report_base64 LONGTEXT NULL,
+  provider_message VARCHAR(255) NULL,
+  provider_message_code VARCHAR(100) NULL,
+  provider_status_code INT NULL,
+  provider_response JSON NULL,
+  fetched_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_credit_reports_user_provider_type (user_id, provider, report_type),
+  KEY idx_credit_reports_user_id (user_id),
+  KEY idx_credit_reports_client_id (client_id),
+  CONSTRAINT fk_credit_reports_user_id
+    FOREIGN KEY (user_id) REFERENCES users(id)
+    ON DELETE CASCADE
+);

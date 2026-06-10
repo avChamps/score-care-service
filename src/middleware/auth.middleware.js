@@ -1,6 +1,20 @@
 const { verifyAuthToken } = require("../services/token.service");
+const {
+  findUserById,
+  findUserByPublicId
+} = require("../models/user.model");
 
-function requireAuth(req, res, next) {
+async function resolveInternalUserId(auth) {
+  if (auth.internalUserId) {
+    return auth.internalUserId;
+  }
+
+  const user = await findUserByPublicId(auth.userId) || await findUserById(auth.userId);
+
+  return user?.internalId;
+}
+
+async function requireAuth(req, res, next) {
   const authorization = req.get("authorization") || "";
   const [scheme, token] = authorization.split(" ");
 
@@ -12,7 +26,21 @@ function requireAuth(req, res, next) {
   }
 
   try {
-    req.auth = verifyAuthToken(token);
+    const auth = verifyAuthToken(token);
+    const internalUserId = await resolveInternalUserId(auth);
+
+    if (!internalUserId) {
+      return res.status(401).json({
+        status: "error",
+        message: "Invalid or expired token"
+      });
+    }
+
+    req.auth = {
+      ...auth,
+      internalUserId
+    };
+
     return next();
   } catch (_error) {
     return res.status(401).json({
@@ -22,6 +50,46 @@ function requireAuth(req, res, next) {
   }
 }
 
+async function optionalAuth(req, _res, next) {
+  const authorization = req.get("authorization") || "";
+  const [scheme, token] = authorization.split(" ");
+
+  if (scheme !== "Bearer" || !token) {
+    return next();
+  }
+
+  try {
+    const auth = verifyAuthToken(token);
+    const internalUserId = await resolveInternalUserId(auth);
+
+    if (internalUserId) {
+      req.auth = {
+        ...auth,
+        internalUserId
+      };
+    }
+  } catch (_error) {
+    req.auth = null;
+  }
+
+  return next();
+}
+
+async function requireAdmin(req, res, next) {
+  const user = await findUserById(req.auth.internalUserId);
+
+  if (!user?.isAdmin) {
+    return res.status(403).json({
+      status: "error",
+      message: "Admin access is required"
+    });
+  }
+
+  return next();
+}
+
 module.exports = {
+  optionalAuth,
+  requireAdmin,
   requireAuth
 };

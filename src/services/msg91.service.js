@@ -5,6 +5,15 @@ function formatIndianMobileIdentifier(mobileNumber) {
 }
 
 async function sendMobileOtp(mobileNumber) {
+  if (!env.msg91.enabled) {
+    return {
+      type: "success",
+      message: "MSG91 OTP sending is disabled; use the configured test OTP",
+      provider: "mock",
+      mobile: formatIndianMobileIdentifier(mobileNumber)
+    };
+  }
+
   if (!env.msg91.authKey) {
     const error = new Error("MSG91 auth key is required");
     error.statusCode = 503;
@@ -28,11 +37,10 @@ async function sendOtpWithTemplate(mobileNumber) {
   url.searchParams.set("authkey", env.msg91.authKey);
   url.searchParams.set("otp_length", String(env.msg91.otpLength));
 
-  const response = await fetch(url, {
+  const response = await fetchMsg91(url, {
     method: "POST",
     headers: {
-      "content-type": "application/json",
-      "Content-Type": "application/JSON"
+      "content-type": "application/json"
     },
     body: JSON.stringify({})
   });
@@ -41,6 +49,16 @@ async function sendOtpWithTemplate(mobileNumber) {
 }
 
 async function verifyMobileOtp(mobileNumber, otp) {
+  if (!env.msg91.enabled) {
+    const error = new Error("MSG91 OTP verification is disabled; use the configured test OTP");
+    error.statusCode = 503;
+    error.details = {
+      provider: "mock",
+      mobile: formatIndianMobileIdentifier(mobileNumber)
+    };
+    throw error;
+  }
+
   if (!env.msg91.authKey) {
     const error = new Error("MSG91 auth key is required");
     error.statusCode = 503;
@@ -52,7 +70,7 @@ async function verifyMobileOtp(mobileNumber, otp) {
   url.searchParams.set("otp", otp);
   url.searchParams.set("mobile", formatIndianMobileIdentifier(mobileNumber));
 
-  const response = await fetch(url, {
+  const response = await fetchMsg91(url, {
     method: "GET",
     headers: {
       authkey: env.msg91.authKey
@@ -60,6 +78,25 @@ async function verifyMobileOtp(mobileNumber, otp) {
   });
 
   return parseMsg91Response(response);
+}
+
+async function fetchMsg91(url, options) {
+  try {
+    return await fetch(url, options);
+  } catch (error) {
+    const cause = error.cause || error;
+    const providerError = new Error("Unable to reach MSG91 OTP service");
+
+    providerError.statusCode = 502;
+    providerError.details = {
+      provider: "MSG91",
+      url: `${url.origin}${url.pathname}`,
+      reason: cause.code || error.message,
+      message: cause.message || error.message
+    };
+
+    throw providerError;
+  }
 }
 
 async function parseMsg91Response(response) {

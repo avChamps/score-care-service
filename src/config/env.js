@@ -11,14 +11,40 @@ const env = {
     expiresIn: process.env.JWT_EXPIRES_IN || "7d"
   },
   msg91: {
+    enabled: process.env.MSG91_ENABLED !== "false",
     authKey: process.env.MSG91_AUTH_KEY || "",
     widgetId: process.env.MSG91_WIDGET_ID || "",
     templateId: process.env.MSG91_TEMPLATE_ID || "",
     otpLength: Number(process.env.MSG91_OTP_LENGTH || 6),
-    testOtp: process.env.MSG91_TEST_OTP || "",
+    testOtp: process.env.MSG91_TEST_OTP || "123456",
     sendOtpUrl:
       process.env.MSG91_SEND_OTP_URL ||
       "https://control.msg91.com/api/v5/otp"
+  },
+  assets: {
+    storageDriver: process.env.ASSETS_STORAGE_DRIVER || "local",
+    rootDir: process.env.ASSETS_ROOT_DIR || "/var/www/scorecare-assets",
+    publicBaseUrl:
+      process.env.ASSETS_PUBLIC_BASE_URL ||
+      "https://scorecareapp.com/assets",
+    sftp: {
+      host: process.env.ASSETS_SFTP_HOST || "",
+      port: Number(process.env.ASSETS_SFTP_PORT || 22),
+      username: process.env.ASSETS_SFTP_USERNAME || "",
+      password: process.env.ASSETS_SFTP_PASSWORD || "",
+      privateKeyPath: process.env.ASSETS_SFTP_PRIVATE_KEY_PATH || "",
+      rootDir:
+        process.env.ASSETS_SFTP_ROOT_DIR ||
+        process.env.ASSETS_ROOT_DIR ||
+        "/var/www/scorecare-assets"
+    }
+  },
+  notifications: {
+    monthlyCibilEnabled:
+      process.env.MONTHLY_CIBIL_NOTIFICATION_ENABLED !== "false",
+    monthlyCibilCron:
+      process.env.MONTHLY_CIBIL_NOTIFICATION_CRON || "0 9 1 * *",
+    timezone: process.env.NOTIFICATION_TIMEZONE || "Asia/Kolkata"
   },
   whatsapp: {
     enabled: process.env.WHATSAPP_ALERT_ENABLED === "true",
@@ -34,6 +60,28 @@ const env = {
     user: process.env.SMTP_USER || "",
     password: process.env.SMTP_PASSWORD || "",
     fromName: process.env.SMTP_FROM_NAME || "ScoreCare"
+  },
+  surepass: {
+    baseUrl: process.env.SUREPASS_BASE_URL || "https://sandbox.surepass.io",
+    bearerToken: process.env.SUREPASS_BEARER_TOKEN || "",
+    cibilReportPath:
+      process.env.SUREPASS_CIBIL_REPORT_PATH ||
+      "/api/v1/credit-report-cibil/fetch-report-pdf",
+    experianScorePath:
+      process.env.SUREPASS_EXPERIAN_SCORE_PATH ||
+      "/api/v1/credit-report-experian/score",
+    experianReportPath:
+      process.env.SUREPASS_EXPERIAN_REPORT_PATH ||
+      "/api/v1/credit-report-experian/fetch-report"
+  },
+  gemini: {
+    apiKey: process.env.GEMINI_API_KEY || "",
+    baseUrl:
+      process.env.GEMINI_BASE_URL ||
+      "https://generativelanguage.googleapis.com/v1beta",
+    model: process.env.GEMINI_MODEL || "gemini-2.5-flash",
+    maxAttempts: Number(process.env.GEMINI_MAX_ATTEMPTS || 6),
+    retryDelayMs: Number(process.env.GEMINI_RETRY_DELAY_MS || 1000)
   },
   db: {
     host: process.env.DB_HOST || "localhost",

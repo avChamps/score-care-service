@@ -1,14 +1,60 @@
+const { randomUUID } = require("crypto");
 const { pool } = require("../config/db");
+
+function mapUser(row) {
+  if (!row) {
+    return null;
+  }
+
+  const user = {
+    id: row.publicId,
+    publicId: row.publicId,
+    mobileNumber: row.mobileNumber,
+    panNumber: row.panNumber,
+    fullName: row.fullName,
+    email: row.email,
+    dateOfBirth: row.dateOfBirth,
+    isAdmin: Boolean(row.isAdmin),
+    accessType: row.accessType,
+    subscriptionStatus: row.subscriptionStatus,
+    subscriptionStartedAt: row.subscriptionStartedAt,
+    subscriptionDueAt: row.subscriptionDueAt,
+    subscriptionEndsAt: row.subscriptionEndsAt,
+    status: row.status,
+    lastLoginAt: row.lastLoginAt,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt
+  };
+
+  Object.defineProperty(user, "internalId", {
+    value: row.internalId,
+    enumerable: false
+  });
+
+  return user;
+}
 
 async function findUserById(id) {
   const [rows] = await pool.query(
     `SELECT
-      id,
+      id AS internalId,
+      public_id AS publicId,
       mobile_number AS mobileNumber,
       pan_number AS panNumber,
       full_name AS fullName,
       email,
       date_of_birth AS dateOfBirth,
+      is_admin AS isAdmin,
+      CASE
+        WHEN subscription_status = 'active'
+          AND (subscription_due_at IS NULL OR subscription_due_at >= NOW())
+        THEN 'paid'
+        ELSE 'free'
+      END AS accessType,
+      subscription_status AS subscriptionStatus,
+      subscription_started_at AS subscriptionStartedAt,
+      subscription_due_at AS subscriptionDueAt,
+      subscription_ends_at AS subscriptionEndsAt,
       status,
       last_login_at AS lastLoginAt,
       created_at AS createdAt,
@@ -18,7 +64,40 @@ async function findUserById(id) {
     [id]
   );
 
-  return rows[0] || null;
+  return mapUser(rows[0]);
+}
+
+async function findUserByPublicId(publicId) {
+  const [rows] = await pool.query(
+    `SELECT
+      id AS internalId,
+      public_id AS publicId,
+      mobile_number AS mobileNumber,
+      pan_number AS panNumber,
+      full_name AS fullName,
+      email,
+      date_of_birth AS dateOfBirth,
+      is_admin AS isAdmin,
+      CASE
+        WHEN subscription_status = 'active'
+          AND (subscription_due_at IS NULL OR subscription_due_at >= NOW())
+        THEN 'paid'
+        ELSE 'free'
+      END AS accessType,
+      subscription_status AS subscriptionStatus,
+      subscription_started_at AS subscriptionStartedAt,
+      subscription_due_at AS subscriptionDueAt,
+      subscription_ends_at AS subscriptionEndsAt,
+      status,
+      last_login_at AS lastLoginAt,
+      created_at AS createdAt,
+      updated_at AS updatedAt
+    FROM users
+    WHERE public_id = ?`,
+    [publicId]
+  );
+
+  return mapUser(rows[0]);
 }
 
 async function upsertUserForLogin(user) {
@@ -27,13 +106,14 @@ async function upsertUserForLogin(user) {
   const [result] = await pool.query(
     `INSERT INTO users (
       mobile_number,
+      public_id,
       pan_number,
       full_name,
       email,
       date_of_birth,
       last_login_at
     )
-    VALUES (?, ?, ?, ?, ?, NOW())
+    VALUES (?, ?, ?, ?, ?, ?, NOW())
     ON DUPLICATE KEY UPDATE
       full_name = VALUES(full_name),
       email = VALUES(email),
@@ -42,6 +122,7 @@ async function upsertUserForLogin(user) {
       updated_at = NOW()`,
     [
       user.mobileNumber,
+      randomUUID(),
       normalizedPan,
       user.fullName,
       user.email || null,
@@ -66,13 +147,14 @@ async function upsertUserForOtpLogin(mobileNumber) {
   const [result] = await pool.query(
     `INSERT INTO users (
       mobile_number,
+      public_id,
       last_login_at
     )
-    VALUES (?, NOW())
+    VALUES (?, ?, NOW())
     ON DUPLICATE KEY UPDATE
       last_login_at = NOW(),
       updated_at = NOW()`,
-    [mobileNumber]
+    [mobileNumber, randomUUID()]
   );
 
   const userId = result.insertId || await findUserIdByMobileNumber(mobileNumber);
@@ -184,7 +266,7 @@ async function createLoginEvent(user, login) {
     )
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      user.id,
+      user.internalId,
       user.mobileNumber,
       user.panNumber || null,
       login.loginMethod || "otp",
@@ -203,8 +285,8 @@ async function listLoginEventsByUserId(userId, limit = 20) {
   const safeLimit = Math.min(Math.max(Number(limit) || 20, 1), 100);
   const [rows] = await pool.query(
     `SELECT
-      id,
-      user_id AS userId,
+      ule.id,
+      u.public_id AS userId,
       mobile_number AS mobileNumber,
       pan_number AS panNumber,
       login_method AS loginMethod,
@@ -214,8 +296,9 @@ async function listLoginEventsByUserId(userId, limit = 20) {
       device_id AS deviceId,
       metadata,
       logged_in_at AS loggedInAt
-    FROM user_login_events
-    WHERE user_id = ?
+    FROM user_login_events ule
+    INNER JOIN users u ON u.id = ule.user_id
+    WHERE ule.user_id = ?
     ORDER BY logged_in_at DESC
     LIMIT ?`,
     [userId, safeLimit]
@@ -227,6 +310,7 @@ async function listLoginEventsByUserId(userId, limit = 20) {
 module.exports = {
   createLoginEvent,
   findUserById,
+  findUserByPublicId,
   hasWelcomeEmailBeenSent,
   listLoginEventsByUserId,
   markWelcomeEmailSent,
