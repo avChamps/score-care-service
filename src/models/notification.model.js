@@ -94,6 +94,24 @@ async function createLoanAppliedNotification(userId, loanApplication) {
   });
 }
 
+async function createLoanStatusUpdatedNotification(userId, loanApplication) {
+  return createNotification(userId, {
+    type: "loan_status_updated",
+    title: "Loan application updated",
+    message: loanApplication.remarks
+      ? `Your ${loanApplication.loanType} loan application status is ${loanApplication.status}. Remarks: ${loanApplication.remarks}`
+      : `Your ${loanApplication.loanType} loan application status is ${loanApplication.status}.`,
+    notificationKey: `loan_status_updated:${loanApplication.id}:${Date.now()}`,
+    data: {
+      loanApplicationId: loanApplication.id,
+      loanAmount: loanApplication.loanAmount,
+      loanType: loanApplication.loanType,
+      status: loanApplication.status,
+      remarks: loanApplication.remarks
+    }
+  });
+}
+
 async function createFreeTierCreatedNotification(userId) {
   return createNotification(userId, {
     type: "free_tier_created",
@@ -263,6 +281,7 @@ module.exports = {
   countUnreadNotificationsByUserPublicId,
   createFreeTierCreatedNotification,
   createLoanAppliedNotification,
+  createLoanStatusUpdatedNotification,
   createMonthlyCibilReportNotifications,
   createNotification,
   listNotificationsByUserPublicId,

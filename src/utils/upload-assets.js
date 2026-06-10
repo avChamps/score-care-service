@@ -218,6 +218,14 @@ async function deleteSavedFiles(documents = {}) {
   );
 }
 
+async function readSavedFile(relativePath) {
+  if (env.assets.storageDriver === "sftp") {
+    return withSftp((sftp) => sftp.get(getSftpRemotePath(relativePath)));
+  }
+
+  return fs.readFile(getLocalPath(relativePath));
+}
+
 const assetUpload = multer({
   storage: multer.memoryStorage(),
   fileFilter(_req, file, callback) {
@@ -278,6 +286,7 @@ module.exports = {
   deleteSavedFiles,
   getPublicIdFromRequest,
   loanApplicationUpload,
+  readSavedFile,
   saveUploadedFiles,
   uploadFields
 };
