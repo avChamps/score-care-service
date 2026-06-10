@@ -2,6 +2,7 @@ const { execFile } = require("child_process");
 const fs = require("fs/promises");
 const os = require("os");
 const path = require("path");
+const PDFDocument = require("pdfkit");
 const { promisify } = require("util");
 
 const {
@@ -711,6 +712,93 @@ function sendPdfBuffer(res, savedReport, pdfBuffer) {
   return res.status(200).send(pdfBuffer);
 }
 
+function formatPdfValue(value) {
+  if (value === null || value === undefined || value === "") {
+    return "-";
+  }
+
+  if (Array.isArray(value)) {
+    return value.map(formatPdfValue).join(", ");
+  }
+
+  if (typeof value === "object") {
+    return Object.entries(value)
+      .map(([key, item]) => `${key.replace(/_/g, " ")}: ${formatPdfValue(item)}`)
+      .join("\n");
+  }
+
+  return String(value);
+}
+
+function writePdfSection(doc, title, data) {
+  if (
+    !data ||
+    (Array.isArray(data) && data.length === 0) ||
+    (!Array.isArray(data) && typeof data === "object" && Object.keys(data).length === 0)
+  ) {
+    return;
+  }
+
+  doc.moveDown(1).fontSize(14).font("Helvetica-Bold").text(title);
+  doc.moveDown(0.4).fontSize(10).font("Helvetica");
+
+  if (Array.isArray(data)) {
+    data.forEach((item, index) => {
+      doc.font("Helvetica-Bold").text(`${index + 1}.`, { continued: true });
+      doc.font("Helvetica").text(` ${formatPdfValue(item)}`);
+      doc.moveDown(0.5);
+    });
+    return;
+  }
+
+  Object.entries(data).forEach(([key, value]) => {
+    doc.font("Helvetica-Bold").text(`${key.replace(/_/g, " ")}:`, {
+      continued: true
+    });
+    doc.font("Helvetica").text(` ${formatPdfValue(value)}`);
+  });
+}
+
+function createCibilReportPdfBuffer(savedReport, displayPayload) {
+  return new Promise((resolve, reject) => {
+    const doc = new PDFDocument({ margin: 40, size: "A4" });
+    const chunks = [];
+    const logoPath = path.join(__dirname, "../../assets/scorecare-logo.PNG");
+    const display = displayPayload.display || {};
+
+    doc.on("data", (chunk) => chunks.push(chunk));
+    doc.on("end", () => resolve(Buffer.concat(chunks)));
+    doc.on("error", reject);
+
+    doc.image(logoPath, 40, 35, { width: 110 });
+    doc
+      .fontSize(18)
+      .font("Helvetica-Bold")
+      .text("CIBIL Credit Report", 170, 45, { align: "right" });
+    doc
+      .fontSize(9)
+      .font("Helvetica")
+      .text(`Generated: ${new Date().toLocaleDateString("en-IN")}`, {
+        align: "right"
+      });
+    doc.moveDown(3);
+
+    writePdfSection(doc, "Profile", display.profile);
+    writePdfSection(doc, "Score", display.score);
+    writePdfSection(doc, "Consumer Information", display.consumer_information);
+    writePdfSection(doc, "Identifications", display.identifications);
+    writePdfSection(doc, "Telephones", display.telephones);
+    writePdfSection(doc, "Emails", display.emails);
+    writePdfSection(doc, "Addresses", display.addresses);
+    writePdfSection(doc, "Employment", display.employment);
+    writePdfSection(doc, "Summary", display.summary);
+    writePdfSection(doc, "Accounts", display.accounts);
+    writePdfSection(doc, "Enquiries", display.enquiries);
+
+    doc.end();
+  });
+}
+
 async function downloadPdfBufferFromLink(creditReportLink) {
   let reportResponse;
 
@@ -998,7 +1086,10 @@ async function getSavedCibilCreditReport(req, res, next) {
 
 async function downloadCibilCreditReport(req, res, next) {
   try {
-    const savedReport = await findCibilReportByUserId(getAuthInternalUserId(req));
+    const internalUserId = getAuthInternalUserId(req);
+    const savedReport =
+      await findCibilReportByUserId(internalUserId) ||
+      await findExperianReportByUserId(internalUserId);
 
     if (!savedReport) {
       return res.status(404).json({
@@ -1007,37 +1098,12 @@ async function downloadCibilCreditReport(req, res, next) {
       });
     }
 
-    if (savedReport.creditReportBase64) {
-      const pdfBuffer = Buffer.from(savedReport.creditReportBase64, "base64");
+    const displayPayload = savedReport.reportType === "cibil_pdf"
+      ? await formatCibilDisplayPayload(savedReport)
+      : { display: buildDisplayCibilReport(savedReport) };
+    const pdfBuffer = await createCibilReportPdfBuffer(savedReport, displayPayload);
 
-      return sendPdfBuffer(res, savedReport, pdfBuffer);
-    }
-
-    if (!savedReport.creditReportLink) {
-      return res.status(404).json({
-        status: "error",
-        message: "CIBIL report download link not found"
-      });
-    }
-
-    try {
-      const pdfBuffer = await downloadPdfBufferFromLink(savedReport.creditReportLink);
-      await saveCibilReportPdfBase64(
-        getAuthInternalUserId(req),
-        pdfBuffer.toString("base64")
-      );
-
-      return sendPdfBuffer(res, savedReport, pdfBuffer);
-    } catch (error) {
-      if (error.statusCode !== 410) {
-        throw error;
-      }
-
-      return res.status(410).json({
-        status: "error",
-        message: "CIBIL report download link has expired"
-      });
-    }
+    return sendPdfBuffer(res, savedReport, pdfBuffer);
   } catch (error) {
     next(error);
   }
