@@ -1,8 +1,13 @@
 const express = require("express");
 const {
+  downloadAdminLoanDetails,
+  exportAdminLoansCsv,
   exportAdminUsersCsv,
+  getAdminChats,
   getAdminDashboardCounts,
+  getAdminLoans,
   getAdminUsers,
+  updateAdminLoan,
   updateAdminUserSubscription
 } = require("../controllers/admin.controller");
 const {
@@ -24,6 +29,11 @@ router.patch(
   requireAdmin,
   updateSubscriptionPlan
 );
+router.get("/chats", requireAuth, requireAdmin, getAdminChats);
+router.get("/loans/export", requireAuth, requireAdmin, exportAdminLoansCsv);
+router.get("/loans", requireAuth, requireAdmin, getAdminLoans);
+router.patch("/loans/:loanId", requireAuth, requireAdmin, updateAdminLoan);
+router.get("/loans/:loanId/download-details", requireAuth, requireAdmin, downloadAdminLoanDetails);
 router.get("/users/export", requireAuth, requireAdmin, exportAdminUsersCsv);
 router.get("/users", requireAuth, requireAdmin, getAdminUsers);
 router.post(
