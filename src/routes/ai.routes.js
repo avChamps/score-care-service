@@ -1,5 +1,5 @@
 const express = require("express");
-const { optionalAuth } = require("../middleware/auth.middleware");
+const { requireAuth } = require("../middleware/auth.middleware");
 const {
   askGemini,
   streamGemini
@@ -7,7 +7,7 @@ const {
 
 const router = express.Router();
 
-router.post("/gemini", optionalAuth, askGemini);
-router.post("/gemini/stream", optionalAuth, streamGemini);
+router.post("/gemini", requireAuth, askGemini);
+router.post("/gemini/stream", requireAuth, streamGemini);
 
 module.exports = router;

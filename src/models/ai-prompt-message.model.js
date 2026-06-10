@@ -5,6 +5,7 @@ async function createAiPromptMessage(prompt) {
     `INSERT INTO ai_prompt_messages (
       user_id,
       user_public_id,
+      ta_id,
       message,
       history,
       model,
@@ -13,10 +14,11 @@ async function createAiPromptMessage(prompt) {
       ip_address,
       user_agent
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       prompt.userId || null,
       prompt.userPublicId || null,
+      prompt.taId || null,
       prompt.message,
       prompt.history && prompt.history.length > 0
         ? JSON.stringify(prompt.history)

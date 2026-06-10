@@ -49,6 +49,7 @@ npm run db:migrate
 - `GET /notifications` lists notifications for the authenticated user.
 - `POST /notifications/:notificationId/read` marks one notification as read.
 - `POST /notifications/read-all` marks all authenticated user notifications as read.
+- `GET /subscription-plans` lists active subscription plans for display.
 - `POST /users/login` creates or updates a user and stores a login event.
 - `PATCH /users/me/profile` updates PAN and full name for the logged-in user.
 - `GET /users/:userId/login-events` lists login history for a user.

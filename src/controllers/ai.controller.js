@@ -56,6 +56,8 @@ function validateHistory(history, errors) {
 function validateGeminiPayload(body) {
   const errors = [];
   const message = String(body.message || body.prompt || "").trim();
+  const rawTaId = body.ta_id ?? body.taId ?? body.table_id ?? body.tableId ?? body.tableid;
+  const taId = rawTaId ? String(rawTaId).trim() : null;
   const model = body.model ? String(body.model).trim() : undefined;
   const history = validateHistory(body.history, errors);
   const temperature = validateNumber(body.temperature, "temperature", errors, {
@@ -76,6 +78,7 @@ function validateGeminiPayload(body) {
   return {
     errors,
     value: {
+      taId,
       message,
       history,
       model,
@@ -90,6 +93,7 @@ async function savePromptMessage(req, prompt) {
     return await createAiPromptMessage({
       userId: req.auth?.internalUserId || null,
       userPublicId: req.auth?.userId || null,
+      taId: prompt.taId,
       message: prompt.message,
       history: prompt.history,
       model: prompt.model,
