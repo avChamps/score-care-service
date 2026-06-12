@@ -20,6 +20,9 @@ const {
   saveFaqs
 } = require("../controllers/faq.controller");
 const {
+  getAllFeedback
+} = require("../controllers/feedback.controller");
+const {
   getAdminGeneralDetails,
   saveAdminGeneralDetails
 } = require("../controllers/general.controller");
@@ -33,10 +36,12 @@ const router = express.Router();
 router.get("/dashboard-counts", requireAuth, requireAdmin, getAdminDashboardCounts);
 router.get("/subscription-plans", requireAuth, requireAdmin, getAllSubscriptionPlans);
 router.post("/subscription-plans", requireAuth, requireAdmin, createPlan);
+router.get("/feedback", requireAuth, requireAdmin, getAllFeedback);
 router.get("/faqs", requireAuth, requireAdmin, getAllFaqs);
 router.post("/faqs", requireAuth, requireAdmin, saveFaqs);
 router.get("/general", requireAuth, requireAdmin, getAdminGeneralDetails);
 router.post("/general", requireAuth, requireAdmin, saveAdminGeneralDetails);
+router.patch("/general", requireAuth, requireAdmin, saveAdminGeneralDetails);
 router.patch(
   "/subscription-plans/:publicId",
   requireAuth,

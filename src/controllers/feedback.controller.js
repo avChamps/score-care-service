@@ -1,5 +1,6 @@
 const {
   createFeedbackByUserId,
+  listAllFeedback,
   listFeedbackByUserId
 } = require("../models/feedback.model");
 const {
@@ -81,6 +82,25 @@ async function getMyFeedback(req, res, next) {
   }
 }
 
+async function getAllFeedback(req, res, next) {
+  try {
+    const data = await listAllFeedback({
+      page: req.query.page,
+      limit: req.query.limit,
+      search: req.query.search,
+      from: req.query.from,
+      totime: req.query.totime
+    });
+
+    return res.status(200).json({
+      status: "success",
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function saveMyFeedback(req, res, next) {
   try {
     const { errors, value } = validateFeedbackPayload(req.body);
@@ -112,6 +132,7 @@ async function saveMyFeedback(req, res, next) {
 }
 
 module.exports = {
+  getAllFeedback,
   getMyFeedback,
   saveMyFeedback
 };

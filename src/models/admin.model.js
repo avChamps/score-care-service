@@ -16,6 +16,8 @@ async function getDashboardCounts() {
   const [
     [userCounts],
     [messageCounts],
+    [feedbackCounts],
+    [feedbackRatingRows],
     [loanCounts],
     [paymentCounts],
     [userStatusRows],
@@ -42,6 +44,14 @@ async function getDashboardCounts() {
       FROM users`
     ),
     pool.query("SELECT COUNT(*) AS totalMessages FROM ai_prompt_messages"),
+    pool.query("SELECT COUNT(*) AS totalFeedback FROM feedback"),
+    pool.query(
+      `SELECT rating AS label, COUNT(*) AS count
+      FROM feedback
+      WHERE rating IS NOT NULL
+      GROUP BY rating
+      ORDER BY rating DESC`
+    ),
     pool.query(
       `SELECT
         COUNT(*) AS applied,
@@ -125,6 +135,7 @@ async function getDashboardCounts() {
   ]);
   const totalUsers = Number(userCounts[0]?.totalUsers || 0);
   const totalMessages = Number(messageCounts[0]?.totalMessages || 0);
+  const totalFeedback = Number(feedbackCounts[0]?.totalFeedback || 0);
   const totalLoans = Number(loanCounts[0]?.applied || 0);
 
   return {
@@ -134,6 +145,7 @@ async function getDashboardCounts() {
     amount: Number(paymentCounts[0]?.amount || 0),
     upcomingOverdues: Number(userCounts[0]?.upcomingOverdues || 0),
     totalMessages,
+    totalFeedback,
     loans: {
       applied: totalLoans,
       approved: Number(loanCounts[0]?.approved || 0),
@@ -144,6 +156,7 @@ async function getDashboardCounts() {
       usersByStatus: mapCountRows(userStatusRows, totalUsers),
       usersByAccessType: mapCountRows(accessTypeRows, totalUsers),
       subscriptionsByStatus: mapCountRows(subscriptionStatusRows, totalUsers),
+      feedbackByRating: mapCountRows(feedbackRatingRows, totalFeedback),
       loansByStatus: mapCountRows(loanStatusRows, totalLoans),
       monthlyRecords: monthlyRows.map((row) => ({
         label: row.label,
