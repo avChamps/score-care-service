@@ -112,6 +112,21 @@ async function createLoanStatusUpdatedNotification(userId, loanApplication) {
   });
 }
 
+async function createFeedbackSubmittedNotification(userId, feedback) {
+  return createNotification(userId, {
+    type: "feedback_submitted",
+    title: "Feedback submitted",
+    message: "Thank you for sharing your feedback.",
+    notificationKey: `feedback_submitted:${feedback.id}`,
+    data: {
+      feedbackId: feedback.id,
+      rating: feedback.rating,
+      isLiked: feedback.isLiked,
+      isDisliked: feedback.isDisliked
+    }
+  });
+}
+
 async function createFreeTierCreatedNotification(userId) {
   return createNotification(userId, {
     type: "free_tier_created",
@@ -279,6 +294,7 @@ async function markAllNotificationsReadByUserPublicId(userPublicId) {
 
 module.exports = {
   countUnreadNotificationsByUserPublicId,
+  createFeedbackSubmittedNotification,
   createFreeTierCreatedNotification,
   createLoanAppliedNotification,
   createLoanStatusUpdatedNotification,

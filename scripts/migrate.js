@@ -20,7 +20,13 @@ async function runMigrations() {
       try {
         await pool.query(statement);
       } catch (error) {
-        if (!["ER_DUP_FIELDNAME", "ER_DUP_KEYNAME"].includes(error.code)) {
+        if (
+          ![
+            "ER_CANT_DROP_FIELD_OR_KEY",
+            "ER_DUP_FIELDNAME",
+            "ER_DUP_KEYNAME"
+          ].includes(error.code)
+        ) {
           throw error;
         }
       }

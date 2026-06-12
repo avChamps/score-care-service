@@ -1,0 +1,16 @@
+CREATE TABLE IF NOT EXISTS feedback (
+  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  user_id BIGINT UNSIGNED NOT NULL,
+  rating TINYINT UNSIGNED NULL,
+  message TEXT NULL,
+  is_liked TINYINT(1) NOT NULL DEFAULT 0,
+  is_disliked TINYINT(1) NOT NULL DEFAULT 0,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY idx_feedback_user_id (user_id),
+  KEY idx_feedback_rating (rating),
+  CONSTRAINT fk_feedback_user_id
+    FOREIGN KEY (user_id) REFERENCES users(id)
+    ON DELETE CASCADE
+);
