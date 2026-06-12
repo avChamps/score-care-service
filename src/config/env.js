@@ -10,17 +10,14 @@ const env = {
     secret: process.env.JWT_SECRET || "change-this-scorecare-secret",
     expiresIn: process.env.JWT_EXPIRES_IN || "7d"
   },
-  msg91: {
-    enabled: process.env.MSG91_ENABLED !== "false",
-    authKey: process.env.MSG91_AUTH_KEY || "",
-    widgetId: process.env.MSG91_WIDGET_ID || "",
-    templateId: process.env.MSG91_TEMPLATE_ID || "",
-    otpLength: Number(process.env.MSG91_OTP_LENGTH || 6),
-    testOtp: process.env.MSG91_TEST_OTP || "123456",
-    sendOtpUrl:
-      process.env.MSG91_SEND_OTP_URL ||
-      "https://control.msg91.com/api/v5/otp"
-  },
+msg91: {
+  authKey: process.env.MSG91_AUTH_KEY,
+  enabled: process.env.MSG91_ENABLED === "true",
+  flowId: process.env.MSG91_FLOW_ID,
+  otpLength: Number(process.env.MSG91_OTP_LENGTH || 6),
+  testOtp: process.env.MSG91_TEST_OTP,
+  sendSmsUrl: process.env.MSG91_SEND_SMS_URL
+},
   assets: {
     storageDriver: process.env.ASSETS_STORAGE_DRIVER || "local",
     rootDir: process.env.ASSETS_ROOT_DIR || "/var/www/scorecare-assets",
