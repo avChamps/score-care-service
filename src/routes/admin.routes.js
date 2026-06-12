@@ -20,6 +20,10 @@ const {
   saveFaqs
 } = require("../controllers/faq.controller");
 const {
+  getAdminGeneralDetails,
+  saveAdminGeneralDetails
+} = require("../controllers/general.controller");
+const {
   requireAdmin,
   requireAuth
 } = require("../middleware/auth.middleware");
@@ -31,6 +35,8 @@ router.get("/subscription-plans", requireAuth, requireAdmin, getAllSubscriptionP
 router.post("/subscription-plans", requireAuth, requireAdmin, createPlan);
 router.get("/faqs", requireAuth, requireAdmin, getAllFaqs);
 router.post("/faqs", requireAuth, requireAdmin, saveFaqs);
+router.get("/general", requireAuth, requireAdmin, getAdminGeneralDetails);
+router.post("/general", requireAuth, requireAdmin, saveAdminGeneralDetails);
 router.patch(
   "/subscription-plans/:publicId",
   requireAuth,
