@@ -14,6 +14,7 @@ function mapUser(row) {
     fullName: row.fullName,
     email: row.email,
     dateOfBirth: row.dateOfBirth,
+    selectedLanguage: row.selectedLanguage || "English",
     isAdmin: Boolean(row.isAdmin),
     accessType: row.accessType,
     subscriptionStatus: row.subscriptionStatus,
@@ -44,6 +45,7 @@ async function findUserById(id) {
       full_name AS fullName,
       email,
       date_of_birth AS dateOfBirth,
+      selected_language AS selectedLanguage,
       is_admin AS isAdmin,
       CASE
         WHEN subscription_status = 'active'
@@ -77,6 +79,7 @@ async function findUserByPublicId(publicId) {
       full_name AS fullName,
       email,
       date_of_birth AS dateOfBirth,
+      selected_language AS selectedLanguage,
       is_admin AS isAdmin,
       CASE
         WHEN subscription_status = 'active'
@@ -174,6 +177,7 @@ async function updateUserProfile(userId, profile) {
       full_name = ?,
       email = COALESCE(?, email),
       date_of_birth = COALESCE(?, date_of_birth),
+      selected_language = COALESCE(?, selected_language),
       updated_at = NOW()
     WHERE id = ?`,
     [
@@ -181,6 +185,7 @@ async function updateUserProfile(userId, profile) {
       profile.fullName,
       profile.email || null,
       profile.dateOfBirth || null,
+      profile.selectedLanguage || null,
       userId
     ]
   );

@@ -159,6 +159,9 @@ function validateProfilePayload(body) {
       fullName,
       email,
       dateOfBirth: body.dateOfBirth || null,
+      selectedLanguage: body.selectedLanguage
+        ? String(body.selectedLanguage).trim()
+        : null,
       sendWelcomeMail:
         body.sendWelcomeMail === true ||
         String(body.sendWelcomeMail || "").toLowerCase() === "true"

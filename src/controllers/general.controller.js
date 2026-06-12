@@ -26,7 +26,8 @@ function validateGeneralSettingsPayload(body) {
     website: normalizeString(body.website),
     email: normalizeString(body.email),
     mobileNumber: normalizeString(body.mobileNumber),
-    whatsappNumber: normalizeString(body.whatsappNumber)
+    whatsappNumber: normalizeString(body.whatsappNumber),
+    selectedLanguage: normalizeString(body.selectedLanguage) || "English"
   };
 
   if (!value.website) {
