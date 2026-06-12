@@ -9,10 +9,19 @@ function mapSubscriptionPlan(row) {
     id: row.publicId,
     publicId: row.publicId,
     planName: row.planName,
+    billingCycle: getBillingCycle(row.publicId),
     amount: Number(row.amount),
     currency: row.currency,
     offerTag: row.offerTag,
     recommendedFor: row.recommendedFor,
+    title: row.title,
+    subtitle: row.subtitle,
+    description: row.description,
+    imageUrl: row.imageUrl,
+    benefits: parseJsonArray(row.benefits),
+    features: parseJsonArray(row.features),
+    buttonLabel: row.buttonLabel,
+    skipLabel: row.skipLabel,
     displayOrder: row.displayOrder,
     isActive:
       row.isActive === undefined || row.isActive === null
@@ -23,6 +32,38 @@ function mapSubscriptionPlan(row) {
   };
 }
 
+function getBillingCycle(publicId) {
+  const value = String(publicId || "").toLowerCase();
+
+  if (value.includes("yearly") || value.includes("annual")) {
+    return "yearly";
+  }
+
+  if (value.includes("monthly")) {
+    return "monthly";
+  }
+
+  return null;
+}
+
+function parseJsonArray(value) {
+  if (!value) {
+    return [];
+  }
+
+  if (Array.isArray(value)) {
+    return value;
+  }
+
+  try {
+    const parsed = JSON.parse(value);
+
+    return Array.isArray(parsed) ? parsed : [];
+  } catch (_error) {
+    return [];
+  }
+}
+
 function subscriptionPlanSelect() {
   return `SELECT
     public_id AS publicId,
@@ -31,6 +72,14 @@ function subscriptionPlanSelect() {
     currency,
     offer_tag AS offerTag,
     recommended_for AS recommendedFor,
+    title,
+    subtitle,
+    description,
+    image_url AS imageUrl,
+    benefits,
+    features,
+    button_label AS buttonLabel,
+    skip_label AS skipLabel,
     display_order AS displayOrder,
     is_active AS isActive,
     created_at AS createdAt,
@@ -46,7 +95,15 @@ async function listActiveSubscriptionPlans() {
       amount,
       currency,
       offer_tag AS offerTag,
-      recommended_for AS recommendedFor
+      recommended_for AS recommendedFor,
+      title,
+      subtitle,
+      description,
+      image_url AS imageUrl,
+      benefits,
+      features,
+      button_label AS buttonLabel,
+      skip_label AS skipLabel
     FROM subscription_plans
     WHERE is_active = 1
     ORDER BY display_order ASC, amount ASC, id ASC`
@@ -62,6 +119,54 @@ async function listAllSubscriptionPlans() {
   );
 
   return rows.map(mapSubscriptionPlan);
+}
+
+async function createSubscriptionPlan(values) {
+  const [result] = await pool.query(
+    `INSERT INTO subscription_plans (
+      public_id,
+      plan_name,
+      amount,
+      currency,
+      offer_tag,
+      recommended_for,
+      title,
+      subtitle,
+      description,
+      image_url,
+      benefits,
+      features,
+      button_label,
+      skip_label,
+      display_order,
+      is_active
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      values.publicId,
+      values.planName,
+      values.amount,
+      values.currency,
+      values.offerTag,
+      values.recommendedFor,
+      values.title,
+      values.subtitle,
+      values.description,
+      values.imageUrl,
+      JSON.stringify(values.benefits || []),
+      JSON.stringify(values.features || []),
+      values.buttonLabel,
+      values.skipLabel,
+      values.displayOrder,
+      values.isActive
+    ]
+  );
+
+  if (result.affectedRows === 0) {
+    return null;
+  }
+
+  return findSubscriptionPlanByPublicId(values.publicId);
 }
 
 async function findSubscriptionPlanByPublicId(publicId) {
@@ -81,6 +186,14 @@ async function updateSubscriptionPlanByPublicId(publicId, values) {
     currency: "currency",
     offerTag: "offer_tag",
     recommendedFor: "recommended_for",
+    title: "title",
+    subtitle: "subtitle",
+    description: "description",
+    imageUrl: "image_url",
+    benefits: "benefits",
+    features: "features",
+    buttonLabel: "button_label",
+    skipLabel: "skip_label",
     displayOrder: "display_order",
     isActive: "is_active"
   };
@@ -95,7 +208,9 @@ async function updateSubscriptionPlanByPublicId(publicId, values) {
   const setClause = entries
     .map(([key]) => `${columnMap[key]} = ?`)
     .join(", ");
-  const params = entries.map(([, value]) => value);
+  const params = entries.map(([key, value]) =>
+    key === "benefits" || key === "features" ? JSON.stringify(value) : value
+  );
 
   const [result] = await pool.query(
     `UPDATE subscription_plans
@@ -113,6 +228,7 @@ async function updateSubscriptionPlanByPublicId(publicId, values) {
 }
 
 module.exports = {
+  createSubscriptionPlan,
   findSubscriptionPlanByPublicId,
   listActiveSubscriptionPlans,
   listAllSubscriptionPlans,
