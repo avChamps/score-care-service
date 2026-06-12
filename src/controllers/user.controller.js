@@ -5,6 +5,7 @@ const {
   hasWelcomeEmailBeenSent,
   listLoginEventsByUserId,
   markWelcomeEmailSent,
+  updateUserSelectedLanguage,
   updateUserProfile,
   upsertUserForLogin
 } = require("../models/user.model");
@@ -220,6 +221,41 @@ async function updateMyProfile(req, res, next) {
   }
 }
 
+async function updateMySelectedLanguage(req, res, next) {
+  try {
+    const selectedLanguage = String(req.body.selectedLanguage || "").trim();
+
+    if (!selectedLanguage) {
+      return res.status(400).json({
+        status: "error",
+        errors: ["selectedLanguage is required"]
+      });
+    }
+
+    const user = await updateUserSelectedLanguage(
+      getAuthInternalUserId(req),
+      selectedLanguage
+    );
+
+    if (!user) {
+      return res.status(404).json({
+        status: "error",
+        message: "User not found"
+      });
+    }
+
+    return res.status(200).json({
+      status: "success",
+      message: "Selected language updated successfully",
+      data: {
+        user
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function getMyProfile(req, res, next) {
   try {
     const internalUserId = getAuthInternalUserId(req);
@@ -283,5 +319,6 @@ module.exports = {
   getMyProfile,
   getUserLoginEvents,
   recordUserLogin,
+  updateMySelectedLanguage,
   updateMyProfile
 };

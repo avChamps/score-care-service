@@ -4,6 +4,7 @@ const {
   getMyProfile,
   getUserLoginEvents,
   recordUserLogin,
+  updateMySelectedLanguage,
   updateMyProfile
 } = require("../controllers/user.controller");
 
@@ -11,6 +12,7 @@ const router = express.Router();
 
 router.post("/login", recordUserLogin);
 router.get("/me/profile", requireAuth, getMyProfile);
+router.patch("/me/language", requireAuth, updateMySelectedLanguage);
 router.patch("/me/profile", requireAuth, updateMyProfile);
 router.get("/:userId/login-events", getUserLoginEvents);
 

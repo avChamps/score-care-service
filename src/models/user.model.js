@@ -197,6 +197,23 @@ async function updateUserProfile(userId, profile) {
   return findUserById(userId);
 }
 
+async function updateUserSelectedLanguage(userId, selectedLanguage) {
+  const [result] = await pool.query(
+    `UPDATE users
+    SET
+      selected_language = ?,
+      updated_at = NOW()
+    WHERE id = ?`,
+    [selectedLanguage, userId]
+  );
+
+  if (result.affectedRows === 0) {
+    return null;
+  }
+
+  return findUserById(userId);
+}
+
 async function hasWelcomeEmailBeenSent(userId) {
   try {
     const [rows] = await pool.query(
@@ -319,6 +336,7 @@ module.exports = {
   hasWelcomeEmailBeenSent,
   listLoginEventsByUserId,
   markWelcomeEmailSent,
+  updateUserSelectedLanguage,
   updateUserProfile,
   upsertUserForOtpLogin,
   upsertUserForLogin
