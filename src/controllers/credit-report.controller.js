@@ -114,6 +114,44 @@ function validateExperianPayload(body) {
   };
 }
 
+function firstPresent(...values) {
+  return values.find((value) => value !== undefined && value !== null && value !== "");
+}
+
+function buildExperianPayload(req, user) {
+  const body = req.body || {};
+  const query = req.query || {};
+
+  return {
+    mobile: firstPresent(
+      body.mobile,
+      body.mobileNumber,
+      query.mobile,
+      query.mobileNumber,
+      user.mobileNumber
+    ),
+    pan: firstPresent(
+      body.pan,
+      body.panNumber,
+      query.pan,
+      query.panNumber,
+      user.panNumber
+    ),
+    name: firstPresent(
+      body.name,
+      body.fullName,
+      query.name,
+      query.fullName,
+      user.fullName
+    ),
+    consent: firstPresent(
+      body.consent,
+      query.consent,
+      "Y"
+    )
+  };
+}
+
 function formatSavedCibilReport(savedReport) {
   return {
     client_id: savedReport.clientId,
@@ -1004,7 +1042,9 @@ async function getExperianCreditReport(req, res, next) {
       });
     }
 
-    const { errors, value } = validateExperianPayload(req.body);
+    const { errors, value } = validateExperianPayload(
+      buildExperianPayload(req, user)
+    );
 
     if (errors.length > 0) {
       return res.status(400).json({

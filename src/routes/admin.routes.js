@@ -11,6 +11,10 @@ const {
   updateAdminUserSubscription
 } = require("../controllers/admin.controller");
 const {
+  getAllSubscriptionPlans,
+  updateSubscriptionPlan
+} = require("../controllers/subscription-plan.controller");
+const {
   requireAdmin,
   requireAuth
 } = require("../middleware/auth.middleware");
@@ -18,6 +22,13 @@ const {
 const router = express.Router();
 
 router.get("/dashboard-counts", requireAuth, requireAdmin, getAdminDashboardCounts);
+router.get("/subscription-plans", requireAuth, requireAdmin, getAllSubscriptionPlans);
+router.patch(
+  "/subscription-plans/:publicId",
+  requireAuth,
+  requireAdmin,
+  updateSubscriptionPlan
+);
 router.get("/chats", requireAuth, requireAdmin, getAdminChats);
 router.get("/loans/export", requireAuth, requireAdmin, exportAdminLoansCsv);
 router.get("/loans", requireAuth, requireAdmin, getAdminLoans);
