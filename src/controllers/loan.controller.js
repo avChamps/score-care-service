@@ -3,6 +3,11 @@ const {
   findLatestLoanApplicationByUserId
 } = require("../models/loan-application.model");
 const {
+  listActiveLoanOptions,
+  listAllLoanOptions,
+  replaceLoanOptions
+} = require("../models/loan-option.model");
+const {
   createLoanAppliedNotification
 } = require("../models/notification.model");
 const {
@@ -42,6 +47,26 @@ function toPositiveNumber(value) {
 
 function normalizeText(value) {
   return String(value || "").trim();
+}
+
+function parseOptionalBoolean(value) {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (typeof value === "boolean") {
+    return value;
+  }
+
+  if (value === 1 || value === "1" || value === "true") {
+    return true;
+  }
+
+  if (value === 0 || value === "0" || value === "false") {
+    return false;
+  }
+
+  return null;
 }
 
 function getFilesForSpec(files, spec) {
@@ -111,6 +136,111 @@ function mapDocuments(savedFiles = []) {
       getSavedFilesForSpec(savedFiles, spec)
     ])
   );
+}
+
+function normalizeOptionPayload(options, optionType, errors, key) {
+  if (!Array.isArray(options)) {
+    errors.push(`${key} must be an array`);
+    return [];
+  }
+
+  return options.map((option, index) => {
+    const label = normalizeText(option.label);
+    const value = normalizeText(option.value);
+    const displayOrder =
+      option.displayOrder === undefined ? index + 1 : Number(option.displayOrder);
+    const isActive =
+      option.isActive === undefined ? true : parseOptionalBoolean(option.isActive);
+
+    if (!label) {
+      errors.push(`${key}[${index}].label is required`);
+    }
+
+    if (!value) {
+      errors.push(`${key}[${index}].value is required`);
+    }
+
+    if (!Number.isInteger(displayOrder) || displayOrder < 0) {
+      errors.push(`${key}[${index}].displayOrder must be a non-negative integer`);
+    }
+
+    if (isActive === null) {
+      errors.push(`${key}[${index}].isActive must be a boolean`);
+    }
+
+    return {
+      publicId: normalizeText(option.publicId || option.id) || undefined,
+      optionType,
+      label,
+      value,
+      displayOrder,
+      isActive
+    };
+  });
+}
+
+function validateLoanOptionsPayload(body) {
+  const errors = [];
+  const value = [
+    ...normalizeOptionPayload(body.loanTypes, "loan_type", errors, "loanTypes"),
+    ...normalizeOptionPayload(
+      body.employmentTypes,
+      "employment_type",
+      errors,
+      "employmentTypes"
+    )
+  ];
+
+  return { errors, value };
+}
+
+async function getLoanOptions(_req, res, next) {
+  try {
+    const options = await listActiveLoanOptions();
+
+    return res.status(200).json({
+      status: "success",
+      data: options
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getAdminLoanOptions(_req, res, next) {
+  try {
+    const options = await listAllLoanOptions();
+
+    return res.status(200).json({
+      status: "success",
+      data: options
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function saveAdminLoanOptions(req, res, next) {
+  try {
+    const { errors, value } = validateLoanOptionsPayload(req.body);
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        status: "error",
+        errors
+      });
+    }
+
+    const options = await replaceLoanOptions(value);
+
+    return res.status(200).json({
+      status: "success",
+      message: "Loan options updated successfully",
+      data: options
+    });
+  } catch (error) {
+    next(error);
+  }
 }
 
 async function applyLoan(req, res, next) {
@@ -199,5 +329,8 @@ async function getMyLoanStatus(req, res, next) {
 
 module.exports = {
   applyLoan,
-  getMyLoanStatus
+  getAdminLoanOptions,
+  getLoanOptions,
+  getMyLoanStatus,
+  saveAdminLoanOptions
 };
