@@ -2,7 +2,6 @@ const {
   sendMobileOtp,
   verifyMobileOtp
 } = require("../services/msg91.service");
-const env = require("../config/env");
 const {
   createLoginEvent,
   upsertUserForOtpLogin
@@ -65,14 +64,7 @@ async function verifyOtp(req, res, next) {
       });
     }
 
-    const staticOtp = env.msg91.testOtp || "123456";
-    const otpResponse = otp === staticOtp
-      ? {
-        type: "success",
-        message: "OTP verified with static OTP",
-        staticOtp: true
-      }
-      : await verifyMobileOtp(mobileNumber, otp);
+    const otpResponse = await verifyMobileOtp(mobileNumber, otp);
     const {
       user,
       isNewUser

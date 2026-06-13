@@ -87,16 +87,16 @@ Example OTP payload:
 For backend OTP sending, set `MSG91_TEMPLATE_ID` from the MSG91 OTP section.
 The service sends `MSG91_OTP_LENGTH=6` as `otp_length=6` to MSG91.
 Set `MSG91_ENABLED=false` to skip MSG91 sending temporarily and return a mock
-send response. In that mode, verify login with `MSG91_TEST_OTP`.
-`/auth/verify-otp` accepts `MSG91_TEST_OTP=123456` or verifies the OTP with
-MSG91 before returning an app token.
+send response.
+`/auth/verify-otp` verifies the OTP sent for the mobile number before returning
+an app token.
 
 Example verify OTP payload:
 
 ```json
 {
   "mobileNumber": "9876543210",
-  "otp": "123456"
+  "otp": "654321"
 }
 ```
 

@@ -24,7 +24,7 @@ if (!env.msg91.flowId) {
   if (!env.msg91.enabled) {
     return {
       type: "success",
-      message: "MSG91 OTP sending is disabled; use the configured test OTP",
+      message: "MSG91 OTP sending is disabled",
       provider: "mock",
       mobile
     };
@@ -75,12 +75,8 @@ async function verifyMobileOtp(mobileNumber, otp) {
   const mobile = formatIndianMobileIdentifier(mobileNumber);
 
   if (!env.msg91.enabled) {
-    if (otp === env.msg91.testOtp) {
-      return { type: "success", message: "OTP verified successfully" };
-    }
-
-    const error = new Error("Invalid OTP");
-    error.statusCode = 400;
+    const error = new Error("MSG91 OTP verification is disabled");
+    error.statusCode = 503;
     throw error;
   }
 

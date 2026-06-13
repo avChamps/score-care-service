@@ -15,7 +15,6 @@ msg91: {
   enabled: process.env.MSG91_ENABLED === "true",
   flowId: process.env.MSG91_FLOW_ID,
   otpLength: Number(process.env.MSG91_OTP_LENGTH || 6),
-  testOtp: process.env.MSG91_TEST_OTP,
   sendSmsUrl: process.env.MSG91_SEND_SMS_URL
 },
   assets: {
