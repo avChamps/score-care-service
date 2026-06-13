@@ -98,6 +98,43 @@ async function findExperianReportByUserId(userId) {
   return findCreditReportByUserId(userId, "experian_report");
 }
 
+async function findLatestSavedCreditReportByUserId(userId) {
+  const [rows] = await pool.query(
+    `SELECT
+      id,
+      user_id AS internalUserId,
+      user_public_id AS userPublicId,
+      provider,
+      report_type AS reportType,
+      client_id AS clientId,
+      name,
+      mobile,
+      pan,
+      gender,
+      user_email AS userEmail,
+      credit_score AS creditScore,
+      credit_report AS creditReport,
+      credit_report_link AS creditReportLink,
+      credit_report_base64 AS creditReportBase64,
+      provider_message AS providerMessage,
+      provider_message_code AS providerMessageCode,
+      provider_status_code AS providerStatusCode,
+      provider_response AS providerResponse,
+      fetched_at AS fetchedAt,
+      created_at AS createdAt,
+      updated_at AS updatedAt
+    FROM credit_reports
+    WHERE user_id = ?
+      AND provider = 'surepass'
+      AND report_type IN ('experian_report', 'cibil_pdf')
+    ORDER BY fetched_at DESC, updated_at DESC, id DESC
+    LIMIT 1`,
+    [userId]
+  );
+
+  return mapCreditReport(rows[0]);
+}
+
 async function saveSurepassCreditReport(userId, reportType, surepassResponse) {
   const data = surepassResponse.data || {};
   const [userRows] = await pool.query(
@@ -208,6 +245,7 @@ module.exports = {
   findCibilReportByUserId,
   findExperianReportByUserId,
   findExperianScoreByUserId,
+  findLatestSavedCreditReportByUserId,
   saveCibilReport,
   saveExperianReport,
   saveExperianScore,

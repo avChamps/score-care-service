@@ -2,7 +2,7 @@ const { execFile } = require("child_process");
 const fs = require("fs/promises");
 const os = require("os");
 const path = require("path");
-const PDFDocument = require("pdfkit");
+const puppeteer = require("puppeteer");
 const { promisify } = require("util");
 
 const {
@@ -14,6 +14,7 @@ const {
   findCibilReportByUserId,
   findExperianReportByUserId,
   findExperianScoreByUserId,
+  findLatestSavedCreditReportByUserId,
   saveCibilReport,
   saveExperianReport,
   saveExperianScore,
@@ -781,44 +782,620 @@ function writePdfSection(doc, title, data) {
   });
 }
 
-function createCibilReportPdfBuffer(savedReport, displayPayload) {
-  return new Promise((resolve, reject) => {
-    const doc = new PDFDocument({ margin: 40, size: "A4" });
-    const chunks = [];
-    const logoPath = path.join(__dirname, "../../assets/scorecare-logo.PNG");
-    const display = displayPayload.display || {};
+function firstValue(...values) {
+  return values.find((value) => value !== null && value !== undefined && value !== "") || "-";
+}
 
-    doc.on("data", (chunk) => chunks.push(chunk));
-    doc.on("end", () => resolve(Buffer.concat(chunks)));
-    doc.on("error", reject);
+function valueOrDash(value) {
+  return value === null || value === undefined || value === "" ? "-" : value;
+}
 
-    doc.image(logoPath, 40, 35, { width: 110 });
-    doc
-      .fontSize(18)
-      .font("Helvetica-Bold")
-      .text("CIBIL Credit Report", 170, 45, { align: "right" });
-    doc
-      .fontSize(9)
-      .font("Helvetica")
-      .text(`Generated: ${new Date().toLocaleDateString("en-IN")}`, {
-        align: "right"
-      });
-    doc.moveDown(3);
+function formatCreditReportDate(value) {
+  const text = String(value || "").trim();
 
-    writePdfSection(doc, "Profile", display.profile);
-    writePdfSection(doc, "Score", display.score);
-    writePdfSection(doc, "Consumer Information", display.consumer_information);
-    writePdfSection(doc, "Identifications", display.identifications);
-    writePdfSection(doc, "Telephones", display.telephones);
-    writePdfSection(doc, "Emails", display.emails);
-    writePdfSection(doc, "Addresses", display.addresses);
-    writePdfSection(doc, "Employment", display.employment);
-    writePdfSection(doc, "Summary", display.summary);
-    writePdfSection(doc, "Accounts", display.accounts);
-    writePdfSection(doc, "Enquiries", display.enquiries);
+  if (!text) {
+    return "-";
+  }
 
-    doc.end();
+  if (/^\d{8}$/.test(text)) {
+    const date = new Date(`${text.slice(0, 4)}-${text.slice(4, 6)}-${text.slice(6, 8)}T00:00:00+05:30`);
+
+    return date.toLocaleDateString("en-IN", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+      timeZone: "Asia/Kolkata"
+    });
+  }
+
+  return text;
+}
+
+function formatInr(value) {
+  const text = String(value || "").replace(/,/g, "").trim();
+
+  if (!text || Number.isNaN(Number(text))) {
+    return valueOrDash(value);
+  }
+
+  if (Number(text) === 0) {
+    return "0";
+  }
+
+  return `Rs. ${Number(text).toLocaleString("en-IN")}`;
+}
+
+function mapGender(value) {
+  const code = String(value || "").trim().toUpperCase();
+
+  if (["1", "M", "MALE"].includes(code)) {
+    return "Male";
+  }
+
+  if (["2", "F", "FEMALE"].includes(code)) {
+    return "Female";
+  }
+
+  return code ? "Other" : "-";
+}
+
+function getCaisAccounts(report) {
+  return toArray(report?.CAIS_Account?.CAIS_Account_DETAILS);
+}
+
+function getAccountSource(account) {
+  return firstValue(account.Subscriber_Name, account.subscriber_name, account.member_name);
+}
+
+function getAccountTypeLabel(account) {
+  const accountType = String(account.Account_Type || "").trim();
+  const accountTypeMap = {
+    "05": "Personal Loan",
+    "5": "Personal Loan",
+    "10": "Credit Card",
+    "06": "Consumer Loan",
+    "6": "Consumer Loan"
+  };
+
+  if (accountTypeMap[accountType]) {
+    return accountTypeMap[accountType];
+  }
+
+  if (account.Portfolio_Type === "R") {
+    return "Credit Card";
+  }
+
+  if (account.Portfolio_Type === "I") {
+    return "Personal Loan";
+  }
+
+  return firstValue(account.Account_Type, account.Account_Type_Description, account.account_type);
+}
+
+function getAccountStatus(account) {
+  if (account.Date_Closed || String(account.Account_Status || "") === "13") {
+    return "Closed";
+  }
+
+  return "Active";
+}
+
+function uniqueBy(items, getKey) {
+  const seen = new Set();
+
+  return items.filter((item) => {
+    const key = String(getKey(item) || "")
+      .replace(/\s+/g, " ")
+      .trim()
+      .toLowerCase();
+
+    if (!key || seen.has(key)) {
+      return false;
+    }
+
+    seen.add(key);
+    return true;
   });
+}
+
+function buildRawReportPdfData(savedReport) {
+  const report = getReportSource(savedReport);
+  const accounts = getCaisAccounts(report);
+  const firstHolder = toArray(accounts[0]?.CAIS_Holder_Details)[0] || {};
+  const ids = accounts.flatMap((account) =>
+    toArray(account.CAIS_Holder_ID_Details).map((id) => ({
+      ...id,
+      source: getAccountSource(account)
+    }))
+  );
+  const panId = ids.find((id) => /PAN|INCOME TAX/i.test(`${id.ID_Type || ""} ${id.Income_TAX_PAN || ""}`));
+  const addresses = uniqueBy(
+    accounts.flatMap((account) =>
+      toArray(account.CAIS_Holder_Address_Details).map((address) => ({
+        address: [
+          address.First_Line_Of_Address_non_normalized,
+          address.Second_Line_Of_Address_non_normalized,
+          address.Third_Line_Of_Address_non_normalized,
+          address.City_non_normalized
+        ].filter(Boolean).join(", "),
+        zip: address.ZIP_Postal_Code_non_normalized,
+        state: address.State_non_normalized,
+        category: address.Address_indicator_non_normalized,
+        source: getAccountSource(account),
+        dateReported: address.Date_of_Address_Reported
+      }))
+    ),
+    (address) => `${address.address}|${address.zip}|${address.state}`
+  ).filter((address) => address.address || address.zip || address.state).slice(0, 8);
+  const telephones = uniqueBy(
+    accounts.flatMap((account) => {
+      const source = getAccountSource(account);
+      const phones = toArray(account.CAIS_Holder_Phone_Details).map((phone) => ({
+        number: phone.Mobile_Telephone_Number || phone.Telephone_Number,
+        type: phone.Telephone_Type,
+        email: phone.EMailId,
+        source
+      }));
+      const idEmails = toArray(account.CAIS_Holder_ID_Details).map((id) => ({
+        number: "-",
+        type: "-",
+        email: id.EMailId,
+        source
+      }));
+
+      return [...phones, ...idEmails];
+    }),
+    (item) => `${item.number || ""}|${item.email || ""}`
+  ).filter((item) => item.number || item.email);
+  const summary = report?.CAIS_Account?.CAIS_Summary || {};
+  const enquiry = report?.CAPS?.CAPS_Summary || {};
+
+  return {
+    score: firstValue(savedReport.creditScore, report?.SCORE?.BureauScore),
+    personal: [
+      { label: "Name", value: firstValue(savedReport.name, report?.name) },
+      { label: "Mobile", value: firstValue(savedReport.mobile, report?.mobile) },
+      { label: "PAN", value: firstValue(panId?.Income_TAX_PAN, panId?.ID_Number, savedReport.pan, report?.pan) },
+      { label: "Date of Birth", value: formatCreditReportDate(firstHolder.Date_of_birth) },
+      { label: "Gender", value: mapGender(firstHolder.Gender_Code || savedReport.gender) },
+      { label: "Identification Type", value: "Income Tax ID Number (PAN)" }
+    ],
+    accountSummary: summary,
+    addresses,
+    telephones,
+    accounts,
+    enquiry
+  };
+}
+
+function formatReportDate(value = new Date()) {
+  const date = new Date(value);
+  const datePart = date.toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    timeZone: "Asia/Kolkata"
+  });
+  const timePart = date.toLocaleTimeString("en-IN", {
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+    timeZone: "Asia/Kolkata"
+  }).toUpperCase();
+
+  return `${datePart}, ${timePart}`;
+}
+
+function ensurePdfSpace(doc, height) {
+  if (doc.y + height <= doc.page.height - doc.page.margins.bottom) {
+    return;
+  }
+
+  doc.addPage();
+}
+
+function drawTemplateSectionTitle(doc, title) {
+  ensurePdfSpace(doc, 34);
+  doc.moveDown(0.8);
+  doc
+    .roundedRect(doc.page.margins.left, doc.y, 170, 22, 11)
+    .fill("#08aeea");
+  doc
+    .fillColor("#ffffff")
+    .font("Helvetica-Bold")
+    .fontSize(10)
+    .text(title.toUpperCase(), doc.page.margins.left + 12, doc.y + 6);
+  doc.fillColor("#222222");
+  doc.y += 28;
+}
+
+function drawInfoGrid(doc, items) {
+  const columns = 3;
+  const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const columnWidth = pageWidth / columns;
+  const rowHeight = 52;
+
+  items.forEach((item, index) => {
+    const column = index % columns;
+
+    if (column === 0) {
+      ensurePdfSpace(doc, rowHeight);
+    }
+
+    const x = doc.page.margins.left + column * columnWidth;
+    const y = doc.y;
+
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(8)
+      .fillColor("#0baee4")
+      .text(item.label.toUpperCase(), x + 6, y + 8, { width: columnWidth - 12 });
+    doc
+      .font("Helvetica")
+      .fontSize(10)
+      .fillColor("#222222")
+      .text(formatPdfValue(item.value), x + 6, y + 24, { width: columnWidth - 12 });
+    doc
+      .moveTo(x, y + rowHeight - 1)
+      .lineTo(x + columnWidth, y + rowHeight - 1)
+      .strokeColor("#dddddd")
+      .stroke();
+
+    if (column === columns - 1 || index === items.length - 1) {
+      doc.y = y + rowHeight;
+    }
+  });
+}
+
+function drawSimpleTable(doc, headers, rows, columnWidths) {
+  const startX = doc.page.margins.left;
+  const headerHeight = 28;
+  const rowHeight = 44;
+
+  ensurePdfSpace(doc, headerHeight + rowHeight);
+  headers.forEach((header, index) => {
+    const x = startX + columnWidths.slice(0, index).reduce((sum, width) => sum + width, 0);
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(8)
+      .fillColor("#0baee4")
+      .text(header.toUpperCase(), x + 4, doc.y + 8, { width: columnWidths[index] - 8 });
+  });
+  doc.y += headerHeight;
+
+  rows.forEach((row) => {
+    const dynamicRowHeight = Math.max(
+      rowHeight,
+      Math.max(...row.map((cell) => String(formatPdfValue(cell)).split("\n").length)) * 12 + 18
+    );
+
+    ensurePdfSpace(doc, dynamicRowHeight);
+    const y = doc.y;
+
+    row.forEach((cell, index) => {
+      const x = startX + columnWidths.slice(0, index).reduce((sum, width) => sum + width, 0);
+      doc
+        .font("Helvetica")
+        .fontSize(9)
+        .fillColor("#222222")
+        .text(formatPdfValue(cell), x + 4, y + 8, {
+          width: columnWidths[index] - 8,
+          height: dynamicRowHeight - 12
+        });
+    });
+
+    doc
+      .moveTo(startX, y)
+      .lineTo(doc.page.width - doc.page.margins.right, y)
+      .strokeColor("#dddddd")
+      .stroke();
+    doc.y = y + dynamicRowHeight;
+  });
+}
+
+function drawNoteRow(doc, text) {
+  ensurePdfSpace(doc, 40);
+  doc
+    .font("Helvetica")
+    .fontSize(9)
+    .fillColor("#0baee4")
+    .text(text, doc.page.margins.left + 4, doc.y + 8, {
+      width: doc.page.width - doc.page.margins.left - doc.page.margins.right - 8,
+      lineGap: 3
+    });
+  doc.y += 40;
+}
+
+function drawKeyValue(doc, label, value, x, y, width) {
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(7)
+    .fillColor("#0baee4")
+    .text(label.toUpperCase(), x, y, { width });
+  doc
+    .font("Helvetica")
+    .fontSize(8.5)
+    .fillColor("#222222")
+    .text(formatPdfValue(value), x, y + 11, { width });
+}
+
+function getPaymentHistoryRows(account) {
+  return toArray(account.CAIS_Account_History)
+    .map((history) => ({
+      label: [history.Month, history.Year].filter((value) => value !== undefined && value !== null && value !== "").join("-"),
+      dpd: valueOrDash(history.Days_Past_Due)
+    }))
+    .filter((history) => history.label && history.dpd !== "-")
+    .slice(0, 12);
+}
+
+function drawPaymentHistory(doc, historyRows, x, y, width) {
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(7)
+    .fillColor("#0baee4")
+    .text("PAYMENT HISTORY", x, y, { width });
+
+  if (historyRows.length === 0) {
+    doc
+      .font("Helvetica")
+      .fontSize(8.5)
+      .fillColor("#222222")
+      .text("-", x, y + 12, { width });
+    return;
+  }
+
+  const itemWidth = width / 6;
+
+  historyRows.forEach((history, index) => {
+    const column = index % 6;
+    const row = Math.floor(index / 6);
+    const itemX = x + column * itemWidth;
+    const itemY = y + 14 + row * 26;
+
+    doc
+      .font("Helvetica")
+      .fontSize(6.5)
+      .fillColor("#555555")
+      .text(history.label, itemX, itemY, { width: itemWidth - 4, align: "center" });
+    doc
+      .font("Helvetica-Bold")
+      .fontSize(8.5)
+      .fillColor("#222222")
+      .text(String(history.dpd), itemX, itemY + 10, { width: itemWidth - 4, align: "center" });
+  });
+}
+
+function drawAccountCard(doc, account, index) {
+  const pageWidth = doc.page.width - doc.page.margins.left - doc.page.margins.right;
+  const x = doc.page.margins.left;
+  const historyRows = getPaymentHistoryRows(account);
+  const cardHeight = 244 + Math.ceil(Math.max(historyRows.length, 1) / 6) * 26;
+
+  ensurePdfSpace(doc, cardHeight + 14);
+
+  const y = doc.y;
+  doc
+    .roundedRect(x, y, pageWidth, cardHeight, 6)
+    .strokeColor("#d8eef5")
+    .lineWidth(1)
+    .stroke();
+  doc
+    .rect(x, y, pageWidth, 28)
+    .fill("#f3fbfe");
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(10)
+    .fillColor("#222222")
+    .text(`${index + 1}. ${firstValue(account.Subscriber_Name)}`, x + 12, y + 9, {
+      width: pageWidth - 150
+    });
+  doc
+    .font("Helvetica-Bold")
+    .fontSize(9)
+    .fillColor(getAccountStatus(account) === "Closed" ? "#555555" : "#238500")
+    .text(getAccountStatus(account), x + pageWidth - 110, y + 9, {
+      width: 95,
+      align: "right"
+    });
+
+  const columnWidth = (pageWidth - 24) / 3;
+  const left = x + 12;
+  const top = y + 42;
+
+  drawKeyValue(doc, "Account Number", account.Account_Number, left, top, columnWidth - 8);
+  drawKeyValue(doc, "Account Type", getAccountTypeLabel(account), left + columnWidth, top, columnWidth - 8);
+  drawKeyValue(doc, "Status", getAccountStatus(account), left + columnWidth * 2, top, columnWidth - 8);
+  drawKeyValue(doc, "Opened Date", formatCreditReportDate(account.Open_Date), left, top + 38, columnWidth - 8);
+  drawKeyValue(doc, "Closed Date", formatCreditReportDate(account.Date_Closed), left + columnWidth, top + 38, columnWidth - 8);
+  drawKeyValue(doc, "Reported Date", formatCreditReportDate(account.Date_Reported), left + columnWidth * 2, top + 38, columnWidth - 8);
+  drawKeyValue(doc, "Last Payment", formatCreditReportDate(account.Date_of_Last_Payment), left, top + 76, columnWidth - 8);
+  drawKeyValue(doc, "Terms Duration", account.Terms_Duration, left + columnWidth, top + 76, columnWidth - 8);
+  drawKeyValue(doc, "Repayment Tenure", account.Repayment_Tenure, left + columnWidth * 2, top + 76, columnWidth - 8);
+  drawKeyValue(doc, "Current Balance", formatInr(account.Current_Balance), left, top + 114, columnWidth - 8);
+  drawKeyValue(doc, "Credit Limit", formatInr(account.Credit_Limit_Amount), left + columnWidth, top + 114, columnWidth - 8);
+  drawKeyValue(doc, "Highest / Original Loan", formatInr(account.Highest_Credit_or_Original_Loan_Amount), left + columnWidth * 2, top + 114, columnWidth - 8);
+  drawKeyValue(doc, "Amount Past Due", formatInr(account.Amount_Past_Due), left, top + 152, columnWidth - 8);
+  drawKeyValue(doc, "Latest DPD", valueOrDash(historyRows[0]?.dpd), left + columnWidth, top + 152, columnWidth - 8);
+  drawPaymentHistory(doc, historyRows, left, top + 190, pageWidth - 24);
+
+  doc.y = y + cardHeight + 10;
+}
+
+function escapeHtml(value) {
+  return String(valueOrDash(value))
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function renderTokens(template, tokens) {
+  return template.replace(/{{\s*([a-zA-Z0-9_]+)\s*}}/g, (_match, key) =>
+    tokens[key] === undefined ? "-" : String(tokens[key])
+  );
+}
+
+function renderAddressCards(addresses) {
+  if (addresses.length === 0) {
+    return '<div class="contact-card">-</div>';
+  }
+
+  return addresses.map((address, index) => `
+    <div class="contact-card">
+      <strong>${index + 1}. ${escapeHtml(address.address)}</strong><br />
+      <span>ZIP: ${escapeHtml(address.zip)}</span><br />
+      <span>State: ${escapeHtml(address.state)}</span><br />
+      <span>Category: ${escapeHtml(address.category)}</span><br />
+      <span>Origin: ${escapeHtml(address.source)}</span><br />
+      <span>Reported: ${escapeHtml(formatCreditReportDate(address.dateReported))}</span>
+    </div>
+  `).join("");
+}
+
+function renderTelephoneRows(telephones) {
+  if (telephones.length === 0) {
+    return '<div class="compact-row"><span>-</span><span>-</span><span>-</span></div>';
+  }
+
+  return telephones.map((telephone) => `
+    <div class="compact-row">
+      <span>${escapeHtml(telephone.type)}</span>
+      <span>${escapeHtml(telephone.number || telephone.email)}</span>
+      <span>${escapeHtml(telephone.source)}</span>
+    </div>
+  `).join("");
+}
+
+function renderAccountCards(accounts) {
+  if (accounts.length === 0) {
+    return '<div class="note">No account details are available in this report.</div>';
+  }
+
+  return accounts.map((account, index) => {
+    const status = getAccountStatus(account);
+    const historyRows = getPaymentHistoryRows(account);
+    const historyHtml = historyRows.length
+      ? historyRows.map((history) => `<span>${escapeHtml(history.label)}: ${escapeHtml(history.dpd)}</span>`).join("")
+      : "<span>-</span>";
+
+    return `
+      <div class="account-card">
+        <div class="account-head">
+          <div>
+            <strong>${index + 1}. ${escapeHtml(account.Subscriber_Name)}</strong>
+            <p>${escapeHtml(getAccountTypeLabel(account))} &bull; ${escapeHtml(account.Account_Number)}</p>
+          </div>
+          <span class="status ${status.toLowerCase()}">${escapeHtml(status)}</span>
+        </div>
+
+        <div class="account-grid">
+          <div><span>Opened</span><strong>${escapeHtml(formatCreditReportDate(account.Open_Date))}</strong></div>
+          <div><span>Closed</span><strong>${escapeHtml(formatCreditReportDate(account.Date_Closed))}</strong></div>
+          <div><span>Reported</span><strong>${escapeHtml(formatCreditReportDate(account.Date_Reported))}</strong></div>
+          <div><span>Last Payment</span><strong>${escapeHtml(formatCreditReportDate(account.Date_of_Last_Payment))}</strong></div>
+          <div><span>Current Balance</span><strong>${escapeHtml(formatInr(account.Current_Balance))}</strong></div>
+          <div><span>Credit Limit</span><strong>${escapeHtml(formatInr(account.Credit_Limit_Amount))}</strong></div>
+          <div><span>High Credit / Loan</span><strong>${escapeHtml(formatInr(account.Highest_Credit_or_Original_Loan_Amount))}</strong></div>
+          <div><span>Past Due</span><strong>${escapeHtml(formatInr(account.Amount_Past_Due))}</strong></div>
+          <div><span>Latest DPD</span><strong>${escapeHtml(valueOrDash(historyRows[0]?.dpd))}</strong></div>
+        </div>
+
+        <div class="payment-history">
+          ${historyHtml}
+        </div>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderEnquirySection(enquiry) {
+  const enquiryCounts = [
+    enquiry.CAPSLast7Days,
+    enquiry.CAPSLast30Days,
+    enquiry.CAPSLast90Days,
+    enquiry.CAPSLast180Days
+  ].map((value) => Number(value || 0));
+
+  if (enquiryCounts.every((count) => count === 0)) {
+    return '<div class="enquiry-card note">No recent enquiries found</div>';
+  }
+
+  return `
+    <div class="info-grid enquiry-card">
+      <div><span class="label">Last 7 Days</span>${escapeHtml(enquiry.CAPSLast7Days)}</div>
+      <div><span class="label">Last 30 Days</span>${escapeHtml(enquiry.CAPSLast30Days)}</div>
+      <div><span class="label">Last 90 Days</span>${escapeHtml(enquiry.CAPSLast90Days)}</div>
+      <div><span class="label">Last 180 Days</span>${escapeHtml(enquiry.CAPSLast180Days)}</div>
+    </div>
+  `;
+}
+
+async function buildCibilReportHtml(savedReport) {
+  const templatePath = path.join(__dirname, "../html/cibil-report.html");
+  const logoPath = path.join(__dirname, "../../assets/scorecare-logo.PNG");
+  const [template, logoBuffer] = await Promise.all([
+    fs.readFile(templatePath, "utf8"),
+    fs.readFile(logoPath)
+  ]);
+  const data = buildRawReportPdfData(savedReport);
+  const creditAccount = data.accountSummary.Credit_Account || {};
+  const outstandingBalance = data.accountSummary.Total_Outstanding_Balance || {};
+
+  return renderTokens(template, {
+    logo_src: `data:image/png;base64,${logoBuffer.toString("base64")}`,
+    report_generated_at: escapeHtml(formatReportDate(new Date())),
+    credit_score: escapeHtml(data.score),
+    name: escapeHtml(data.personal[0]?.value),
+    date_of_birth: escapeHtml(data.personal[3]?.value),
+    gender: escapeHtml(data.personal[4]?.value),
+    identification_type: escapeHtml("Income Tax ID Number (PAN)"),
+    pan: escapeHtml(data.personal[2]?.value),
+    issue_date: "-",
+    credit_account_total: escapeHtml(creditAccount.CreditAccountTotal),
+    credit_account_active: escapeHtml(creditAccount.CreditAccountActive),
+    credit_account_closed: escapeHtml(creditAccount.CreditAccountClosed),
+    credit_account_default: escapeHtml(creditAccount.CreditAccountDefault),
+    outstanding_balance_all: escapeHtml(formatInr(outstandingBalance.Outstanding_Balance_All)),
+    outstanding_balance_secured: escapeHtml(formatInr(outstandingBalance.Outstanding_Balance_Secured)),
+    outstanding_balance_unsecured: escapeHtml(formatInr(outstandingBalance.Outstanding_Balance_UnSecured)),
+    address_rows: renderAddressCards(data.addresses),
+    telephone_rows: renderTelephoneRows(data.telephones),
+    account_total: escapeHtml(data.accounts.length),
+    account_rows: renderAccountCards(data.accounts),
+    enquiry_rows: renderEnquirySection(data.enquiry)
+  });
+}
+
+async function createCibilReportPdfBuffer(savedReport) {
+  const html = await buildCibilReportHtml(savedReport);
+  const browser = await puppeteer.launch({
+    args: ["--no-sandbox", "--disable-setuid-sandbox"]
+  });
+
+  try {
+    const page = await browser.newPage();
+    await page.setContent(html, {
+      waitUntil: ["load", "networkidle0"]
+    });
+
+    const pdfBuffer = await page.pdf({
+      format: "A4",
+      printBackground: true,
+      margin: {
+        top: "18mm",
+        right: "12mm",
+        bottom: "18mm",
+        left: "12mm"
+      },
+      preferCSSPageSize: true
+    });
+
+    return Buffer.from(pdfBuffer);
+  } finally {
+    await browser.close();
+  }
 }
 
 async function downloadPdfBufferFromLink(creditReportLink) {
@@ -1099,9 +1676,7 @@ async function getSavedCibilCreditReport(req, res, next) {
 async function downloadCibilCreditReport(req, res, next) {
   try {
     const internalUserId = getAuthInternalUserId(req);
-    const savedReport =
-      await findCibilReportByUserId(internalUserId) ||
-      await findExperianReportByUserId(internalUserId);
+    const savedReport = await findLatestSavedCreditReportByUserId(internalUserId);
 
     if (!savedReport) {
       return res.status(404).json({
@@ -1110,10 +1685,7 @@ async function downloadCibilCreditReport(req, res, next) {
       });
     }
 
-    const displayPayload = savedReport.reportType === "cibil_pdf"
-      ? await formatCibilDisplayPayload(savedReport)
-      : { display: buildDisplayCibilReport(savedReport) };
-    const pdfBuffer = await createCibilReportPdfBuffer(savedReport, displayPayload);
+    const pdfBuffer = await createCibilReportPdfBuffer(savedReport);
 
     return sendPdfBuffer(res, savedReport, pdfBuffer);
   } catch (error) {

@@ -139,6 +139,38 @@ async function createFreeTierCreatedNotification(userId) {
   });
 }
 
+async function createCibilRepairRequestCreatedNotification(userId, request) {
+  return createNotification(userId, {
+    type: "cibil_repair_request_created",
+    title: "CIBIL dispute raised",
+    message: "Your CIBIL dispute request has been submitted.",
+    notificationKey: `cibil_repair_request_created:${request.id}`,
+    data: {
+      repairRequestId: request.id,
+      repairStatus: request.repairStatus,
+      activeDisputes: request.activeDisputes,
+      resolvedDisputes: request.resolvedDisputes
+    }
+  });
+}
+
+async function createCibilRepairRequestUpdatedNotification(userId, request) {
+  return createNotification(userId, {
+    type: "cibil_repair_request_updated",
+    title: "CIBIL dispute updated",
+    message: "Your CIBIL dispute request has been updated.",
+    notificationKey: `cibil_repair_request_updated:${request.id}:${Date.now()}`,
+    data: {
+      repairRequestId: request.id,
+      repairStatus: request.repairStatus,
+      activeDisputes: request.activeDisputes,
+      resolvedDisputes: request.resolvedDisputes,
+      pointsGained: request.pointsGained,
+      remarks: request.remarks
+    }
+  });
+}
+
 async function createMonthlyCibilReportNotifications(monthKey) {
   const [result] = await pool.query(
     `INSERT INTO notifications (
@@ -294,6 +326,8 @@ async function markAllNotificationsReadByUserPublicId(userPublicId) {
 
 module.exports = {
   countUnreadNotificationsByUserPublicId,
+  createCibilRepairRequestCreatedNotification,
+  createCibilRepairRequestUpdatedNotification,
   createFeedbackSubmittedNotification,
   createFreeTierCreatedNotification,
   createLoanAppliedNotification,

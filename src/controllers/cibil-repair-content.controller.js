@@ -12,6 +12,11 @@ const {
   listCibilRepairRequests,
   updateCibilRepairRequest
 } = require("../models/cibil-repair-request.model");
+const {
+  createCibilRepairRequestCreatedNotification,
+  createCibilRepairRequestUpdatedNotification
+} = require("../models/notification.model");
+const { findUserByPublicId } = require("../models/user.model");
 
 const paymentStatuses = new Set(["pending", "paid", "failed", "refunded"]);
 const repairStatuses = new Set([
@@ -324,12 +329,17 @@ async function createMyCibilRepairRequest(req, res, next) {
       req.auth.userId,
       value
     );
+    const notification = await createCibilRepairRequestCreatedNotification(
+      req.auth.internalUserId,
+      request
+    );
 
     return res.status(201).json({
       status: "success",
       message: "CIBIL repair request saved successfully",
       data: {
-        request
+        request,
+        notification
       }
     });
   } catch (error) {
@@ -462,11 +472,18 @@ async function updateAdminCibilRepairRequest(req, res, next) {
       });
     }
 
+    const user = await findUserByPublicId(request.userPublicId);
+    const notification = await createCibilRepairRequestUpdatedNotification(
+      user.internalId,
+      request
+    );
+
     return res.status(200).json({
       status: "success",
       message: "CIBIL repair request updated successfully",
       data: {
-        request
+        request,
+        notification
       }
     });
   } catch (error) {
