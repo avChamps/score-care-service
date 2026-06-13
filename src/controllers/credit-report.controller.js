@@ -178,22 +178,6 @@ function formatSavedExperianReport(savedReport) {
   };
 }
 
-function buildExperianScoreFallbackResponse(value) {
-  return {
-    data: {
-      client_id: "experian_credit_score_BLffggUeWtqOpHTjugpw",
-      name: value.name.toUpperCase(),
-      mobile: value.mobile,
-      pan: value.pan,
-      credit_score: "796"
-    },
-    status_code: 200,
-    success: true,
-    message: "Success",
-    message_code: "success"
-  };
-}
-
 function normalizeKey(value) {
   return String(value || "").replace(/[^a-z0-9]/gi, "").toLowerCase();
 }
@@ -966,26 +950,14 @@ async function getExperianCreditScore(req, res, next) {
       });
     }
 
-    let report;
-    let source = "surepass";
-
-    try {
-      report = await fetchExperianCreditScore(value);
-    } catch (error) {
-      if (error.details?.message_code !== "balance_exhausted") {
-        throw error;
-      }
-
-      report = buildExperianScoreFallbackResponse(value);
-      source = "fallback";
-    }
+    const report = await fetchExperianCreditScore(value);
 
     const savedExperianScore = await saveExperianScore(internalUserId, report);
 
     return res.status(200).json({
       status: "success",
       message: "Experian credit score fetched successfully",
-      source,
+      source: "surepass",
       userId: savedExperianScore.userId,
       data: formatSavedExperianReport(savedExperianScore),
       provider: {
