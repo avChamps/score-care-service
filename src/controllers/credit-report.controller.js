@@ -1121,12 +1121,30 @@ function drawKeyValue(doc, label, value, x, y, width) {
 
 function getPaymentHistoryRows(account) {
   return toArray(account.CAIS_Account_History)
-    .map((history) => ({
-      label: [history.Month, history.Year].filter((value) => value !== undefined && value !== null && value !== "").join("-"),
-      dpd: valueOrDash(history.Days_Past_Due)
-    }))
-    .filter((history) => history.label && history.dpd !== "-")
+    .map((history) => {
+      const month = String(history.Month || "").trim();
+      const year = String(history.Year || "").trim();
+      const dpd = Number(String(history.Days_Past_Due || "0").trim());
+
+      return {
+        label: formatPaymentHistoryMonth(month, year),
+        dpd: Number.isNaN(dpd) ? 0 : dpd
+      };
+    })
+    .filter((history) => history.label)
     .slice(0, 12);
+}
+
+function formatPaymentHistoryMonth(month, year) {
+  const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const monthNumber = Number(month);
+  const monthName = monthNames[monthNumber - 1] || month;
+
+  if (!monthName || !year) {
+    return "";
+  }
+
+  return `${monthName} ${year}`;
 }
 
 function drawPaymentHistory(doc, historyRows, x, y, width) {
@@ -1239,19 +1257,31 @@ function renderTokens(template, tokens) {
 
 function renderAddressCards(addresses) {
   if (addresses.length === 0) {
-    return '<div class="contact-card">-</div>';
+    return '<div class="address-row"><span>-</span><span>-</span><span>-</span><span>-</span><span>-</span><span>-</span><span>-</span></div>';
   }
 
-  return addresses.map((address, index) => `
-    <div class="contact-card">
-      <strong>${index + 1}. ${escapeHtml(address.address)}</strong><br />
-      <span>ZIP: ${escapeHtml(address.zip)}</span><br />
-      <span>State: ${escapeHtml(address.state)}</span><br />
-      <span>Category: ${escapeHtml(address.category)}</span><br />
-      <span>Origin: ${escapeHtml(address.source)}</span><br />
-      <span>Reported: ${escapeHtml(formatCreditReportDate(address.dateReported))}</span>
+  return `
+    <div class="address-row header-row">
+      <span>No</span>
+      <span>Address</span>
+      <span>ZIP</span>
+      <span>State</span>
+      <span>Category</span>
+      <span>Origin</span>
+      <span>Reported</span>
     </div>
-  `).join("");
+    ${addresses.map((address, index) => `
+      <div class="address-row">
+        <span>${index + 1}</span>
+        <span>${escapeHtml(address.address)}</span>
+        <span>${escapeHtml(address.zip)}</span>
+        <span>${escapeHtml(address.state)}</span>
+        <span>${escapeHtml(address.category)}</span>
+        <span>${escapeHtml(address.source)}</span>
+        <span>${escapeHtml(formatCreditReportDate(address.dateReported))}</span>
+      </div>
+    `).join("")}
+  `;
 }
 
 function renderTelephoneRows(telephones) {
@@ -1277,8 +1307,18 @@ function renderAccountCards(accounts) {
     const status = getAccountStatus(account);
     const historyRows = getPaymentHistoryRows(account);
     const historyHtml = historyRows.length
-      ? historyRows.map((history) => `<span>${escapeHtml(history.label)}: ${escapeHtml(history.dpd)}</span>`).join("")
-      : "<span>-</span>";
+      ? historyRows.map((history) => {
+        const isPaid = history.dpd === 0;
+
+        return `
+          <div class="payment-history-row">
+            <span>${escapeHtml(history.label)}</span>
+            <span>${escapeHtml(isPaid ? "0" : `${history.dpd} days`)}</span>
+            <span><span class="payment-status ${isPaid ? "paid" : "overdue"}">${isPaid ? "Paid / On time" : "Overdue"}</span></span>
+          </div>
+        `;
+      }).join("")
+      : '<div class="payment-history-row"><span>-</span><span>-</span><span>-</span></div>';
 
     return `
       <div class="account-card">
@@ -1302,8 +1342,16 @@ function renderAccountCards(accounts) {
           <div><span>Latest DPD</span><strong>${escapeHtml(valueOrDash(historyRows[0]?.dpd))}</strong></div>
         </div>
 
-        <div class="payment-history">
-          ${historyHtml}
+        <div class="payment-history-section">
+          <div class="payment-history-title">Payment History</div>
+          <div class="payment-history-table">
+            <div class="payment-history-row header-row">
+              <span>Month / Year</span>
+              <span>DPD / Due</span>
+              <span>Status</span>
+            </div>
+            ${historyHtml}
+          </div>
         </div>
       </div>
     `;
@@ -1370,6 +1418,7 @@ async function buildCibilReportHtml(savedReport) {
 
 async function createCibilReportPdfBuffer(savedReport) {
   const html = await buildCibilReportHtml(savedReport);
+  const downloadedAt = escapeHtml(formatReportDate(new Date()));
   const browser = await puppeteer.launch({
     args: ["--no-sandbox", "--disable-setuid-sandbox"]
   });
@@ -1383,6 +1432,14 @@ async function createCibilReportPdfBuffer(savedReport) {
     const pdfBuffer = await page.pdf({
       format: "A4",
       printBackground: true,
+      displayHeaderFooter: true,
+      headerTemplate: "<div></div>",
+      footerTemplate: `
+        <div style="width:100%;padding:0 12mm;font-family:Arial,sans-serif;font-size:9px;color:#555;display:flex;justify-content:space-between;align-items:center;">
+          <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
+          <span>Downloaded: ${downloadedAt}</span>
+        </div>
+      `,
       margin: {
         top: "18mm",
         right: "12mm",
