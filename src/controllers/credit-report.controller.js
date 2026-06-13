@@ -730,7 +730,10 @@ function sendPdfBuffer(res, savedReport, pdfBuffer) {
   res.set({
     "Content-Type": "application/pdf",
     "Content-Disposition": `attachment; filename="${getReportFileName(savedReport)}"`,
-    "Content-Length": pdfBuffer.length
+    "Content-Length": pdfBuffer.length,
+    "Access-Control-Expose-Headers": "Content-Disposition, Content-Length",
+    "Cache-Control": "no-store",
+    "X-Content-Type-Options": "nosniff"
   });
 
   return res.status(200).send(pdfBuffer);
