@@ -1133,6 +1133,12 @@ function getPaymentHistoryRows(account) {
       };
     })
     .filter((history) => history.label)
+    .map((history, index, rows) => ({
+      ...history,
+      label: index === 0 || history.label.split(" ").pop() !== rows[index - 1].label.split(" ").pop()
+        ? history.label
+        : history.label.split(" ")[0]
+    }))
     .slice(0, 12);
 }
 
@@ -1312,14 +1318,14 @@ function renderAccountCards(accounts) {
         const isPaid = history.dpd === 0;
 
         return `
-          <div class="payment-history-row">
-            <span>${escapeHtml(history.label)}</span>
-            <span>${escapeHtml(isPaid ? "0" : `${history.dpd} days`)}</span>
-            <span><span class="payment-status ${isPaid ? "paid" : "overdue"}">${isPaid ? "Paid / On time" : "Overdue"}</span></span>
+          <div class="payment-history-item">
+            <span class="payment-history-month">${escapeHtml(history.label)}</span>
+            <span class="payment-history-dpd">${escapeHtml(isPaid ? "0 DPD" : `${history.dpd} DPD`)}</span>
+            <span class="payment-status ${isPaid ? "paid" : "overdue"}">${isPaid ? "Paid / On time" : "Overdue"}</span>
           </div>
         `;
       }).join("")
-      : '<div class="payment-history-row"><span>-</span><span>-</span><span>-</span></div>';
+      : '<div class="payment-history-item"><span>-</span></div>';
 
     return `
       <div class="account-card">
@@ -1345,12 +1351,7 @@ function renderAccountCards(accounts) {
 
         <div class="payment-history-section">
           <div class="payment-history-title">Payment History</div>
-          <div class="payment-history-table">
-            <div class="payment-history-row header-row">
-              <span>Month / Year</span>
-              <span>DPD / Due</span>
-              <span>Status</span>
-            </div>
+          <div class="payment-history-list">
             ${historyHtml}
           </div>
         </div>
