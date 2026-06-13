@@ -118,6 +118,29 @@ async function findCibilRepairRequestByPublicId(publicId) {
   return mapCibilRepairRequest(rows[0]);
 }
 
+async function findCibilRepairRequestByPublicIdAndUserId(publicId, userId) {
+  const [rows] = await pool.query(
+    `${requestSelect()}
+    WHERE public_id = ?
+      AND user_id = ?
+    LIMIT 1`,
+    [publicId, userId]
+  );
+
+  return mapCibilRepairRequest(rows[0]);
+}
+
+async function listCibilRepairRequestsByUserId(userId) {
+  const [rows] = await pool.query(
+    `${requestSelect()}
+    WHERE user_id = ?
+    ORDER BY created_at DESC, id DESC`,
+    [userId]
+  );
+
+  return rows.map(mapCibilRepairRequest);
+}
+
 async function listCibilRepairRequests() {
   const [rows] = await pool.query(
     `${requestSelect()}
@@ -162,7 +185,9 @@ async function updateCibilRepairRequest(publicId, update) {
 module.exports = {
   createCibilRepairRequest,
   findCibilRepairRequestByPublicId,
+  findCibilRepairRequestByPublicIdAndUserId,
   findLatestCibilRepairRequestByUserId,
+  listCibilRepairRequestsByUserId,
   listCibilRepairRequests,
   updateCibilRepairRequest
 };

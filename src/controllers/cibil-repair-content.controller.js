@@ -6,7 +6,9 @@ const {
 const {
   createCibilRepairRequest,
   findCibilRepairRequestByPublicId,
+  findCibilRepairRequestByPublicIdAndUserId,
   findLatestCibilRepairRequestByUserId,
+  listCibilRepairRequestsByUserId,
   listCibilRepairRequests,
   updateCibilRepairRequest
 } = require("../models/cibil-repair-request.model");
@@ -337,7 +339,32 @@ async function createMyCibilRepairRequest(req, res, next) {
 
 async function getMyCibilRepairRequest(req, res, next) {
   try {
-    const request = await findLatestCibilRepairRequestByUserId(req.auth.internalUserId);
+    const requests = await listCibilRepairRequestsByUserId(req.auth.internalUserId);
+
+    return res.status(200).json({
+      status: "success",
+      data: {
+        requests
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getMyCibilRepairRequestById(req, res, next) {
+  try {
+    const request = await findCibilRepairRequestByPublicIdAndUserId(
+      req.params.publicId,
+      req.auth.internalUserId
+    );
+
+    if (!request) {
+      return res.status(404).json({
+        status: "error",
+        message: "CIBIL repair request not found"
+      });
+    }
 
     return res.status(200).json({
       status: "success",
@@ -352,15 +379,29 @@ async function getMyCibilRepairRequest(req, res, next) {
 
 async function getMyCibilRepairStatus(req, res, next) {
   try {
-    const request = await findLatestCibilRepairRequestByUserId(req.auth.internalUserId);
+    const request = req.params.publicId
+      ? await findCibilRepairRequestByPublicIdAndUserId(
+          req.params.publicId,
+          req.auth.internalUserId
+        )
+      : await findLatestCibilRepairRequestByUserId(req.auth.internalUserId);
+
+    if (req.params.publicId && !request) {
+      return res.status(404).json({
+        status: "error",
+        message: "CIBIL repair request not found"
+      });
+    }
 
     return res.status(200).json({
       status: "success",
       data: {
+        repairId: request?.publicId || null,
         activeDisputes: request?.activeDisputes || 0,
         resolvedDisputes: request?.resolvedDisputes || 0,
         pointsGained: request?.pointsGained || 0,
         repairStatus: request?.repairStatus || null,
+        progressItems: request?.progressItems || [],
         remarks: request?.remarks || null
       }
     });
@@ -439,6 +480,7 @@ module.exports = {
   getAdminCibilRepairRequests,
   getCibilRepairContent,
   getMyCibilRepairRequest,
+  getMyCibilRepairRequestById,
   getMyCibilRepairStatus,
   saveAdminCibilRepairContent,
   updateAdminCibilRepairRequest
