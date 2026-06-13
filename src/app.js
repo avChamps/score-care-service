@@ -7,6 +7,7 @@ const env = require("./config/env");
 const adminRoutes = require("./routes/admin.routes");
 const aiRoutes = require("./routes/ai.routes");
 const authRoutes = require("./routes/auth.routes");
+const cibilRepairContentRoutes = require("./routes/cibil-repair-content.routes");
 const creditReportRoutes = require("./routes/credit-report.routes");
 const faqRoutes = require("./routes/faq.routes");
 const feedbackRoutes = require("./routes/feedback.routes");
@@ -43,6 +44,7 @@ app.get("/", (_req, res) => {
 app.use("/auth", authRoutes);
 app.use("/admin", adminRoutes);
 app.use("/ai", aiRoutes);
+app.use("/cibil-repair-content", cibilRepairContentRoutes);
 app.use("/credit-reports", creditReportRoutes);
 app.use("/faqs", faqRoutes);
 app.use("/feedback", feedbackRoutes);

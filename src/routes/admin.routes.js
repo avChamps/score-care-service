@@ -31,6 +31,10 @@ const {
   saveAdminLegalContentDetails
 } = require("../controllers/legal-content.controller");
 const {
+  getAdminCibilRepairContent,
+  saveAdminCibilRepairContent
+} = require("../controllers/cibil-repair-content.controller");
+const {
   getAdminLoanOptions,
   saveAdminLoanOptions
 } = require("../controllers/loan.controller");
@@ -53,6 +57,9 @@ router.patch("/general", requireAuth, requireAdmin, saveAdminGeneralDetails);
 router.get("/legal-content", requireAuth, requireAdmin, getAdminLegalContentDetails);
 router.post("/legal-content", requireAuth, requireAdmin, saveAdminLegalContentDetails);
 router.patch("/legal-content", requireAuth, requireAdmin, saveAdminLegalContentDetails);
+router.get("/cibil-repair-content", requireAuth, requireAdmin, getAdminCibilRepairContent);
+router.post("/cibil-repair-content", requireAuth, requireAdmin, saveAdminCibilRepairContent);
+router.patch("/cibil-repair-content", requireAuth, requireAdmin, saveAdminCibilRepairContent);
 router.get("/loan-options", requireAuth, requireAdmin, getAdminLoanOptions);
 router.post("/loan-options", requireAuth, requireAdmin, saveAdminLoanOptions);
 router.patch("/loan-options", requireAuth, requireAdmin, saveAdminLoanOptions);
