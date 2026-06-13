@@ -1,0 +1,168 @@
+const { randomUUID } = require("crypto");
+
+const { pool } = require("../config/db");
+
+function parseJson(value) {
+  if (!value || typeof value !== "string") {
+    return value || null;
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch (_error) {
+    return null;
+  }
+}
+
+function mapCibilRepairRequest(row) {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    id: row.publicId,
+    publicId: row.publicId,
+    userId: row.userPublicId,
+    userPublicId: row.userPublicId,
+    planId: row.planPublicId,
+    planPublicId: row.planPublicId,
+    planName: row.planName,
+    amount: Number(row.amount),
+    currency: row.currency,
+    paymentStatus: row.paymentStatus,
+    repairStatus: row.repairStatus,
+    activeDisputes: Number(row.activeDisputes),
+    resolvedDisputes: Number(row.resolvedDisputes),
+    pointsGained: Number(row.pointsGained),
+    progressItems: parseJson(row.progressItems) || [],
+    remarks: row.remarks,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt
+  };
+}
+
+function requestSelect() {
+  return `SELECT
+    public_id AS publicId,
+    user_public_id AS userPublicId,
+    plan_public_id AS planPublicId,
+    plan_name AS planName,
+    amount,
+    currency,
+    payment_status AS paymentStatus,
+    repair_status AS repairStatus,
+    active_disputes AS activeDisputes,
+    resolved_disputes AS resolvedDisputes,
+    points_gained AS pointsGained,
+    progress_items AS progressItems,
+    remarks,
+    created_at AS createdAt,
+    updated_at AS updatedAt
+  FROM cibil_repair_requests`;
+}
+
+async function createCibilRepairRequest(userId, userPublicId, request) {
+  const publicId = randomUUID();
+
+  await pool.query(
+    `INSERT INTO cibil_repair_requests (
+      public_id,
+      user_id,
+      user_public_id,
+      plan_public_id,
+      plan_name,
+      amount,
+      currency,
+      payment_status,
+      repair_status,
+      remarks
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      publicId,
+      userId,
+      userPublicId,
+      request.planPublicId,
+      request.planName,
+      request.amount,
+      request.currency,
+      request.paymentStatus,
+      request.repairStatus,
+      request.remarks
+    ]
+  );
+
+  return findCibilRepairRequestByPublicId(publicId);
+}
+
+async function findLatestCibilRepairRequestByUserId(userId) {
+  const [rows] = await pool.query(
+    `${requestSelect()}
+    WHERE user_id = ?
+    ORDER BY created_at DESC, id DESC
+    LIMIT 1`,
+    [userId]
+  );
+
+  return mapCibilRepairRequest(rows[0]);
+}
+
+async function findCibilRepairRequestByPublicId(publicId) {
+  const [rows] = await pool.query(
+    `${requestSelect()}
+    WHERE public_id = ?
+    LIMIT 1`,
+    [publicId]
+  );
+
+  return mapCibilRepairRequest(rows[0]);
+}
+
+async function listCibilRepairRequests() {
+  const [rows] = await pool.query(
+    `${requestSelect()}
+    ORDER BY created_at DESC, id DESC`
+  );
+
+  return rows.map(mapCibilRepairRequest);
+}
+
+async function updateCibilRepairRequest(publicId, update) {
+  const [result] = await pool.query(
+    `UPDATE cibil_repair_requests
+    SET
+      payment_status = ?,
+      repair_status = ?,
+      active_disputes = ?,
+      resolved_disputes = ?,
+      points_gained = ?,
+      progress_items = ?,
+      remarks = ?,
+      updated_at = NOW()
+    WHERE public_id = ?`,
+    [
+      update.paymentStatus,
+      update.repairStatus,
+      update.activeDisputes,
+      update.resolvedDisputes,
+      update.pointsGained,
+      JSON.stringify(update.progressItems || []),
+      update.remarks,
+      publicId
+    ]
+  );
+
+  if (result.affectedRows === 0) {
+    return null;
+  }
+
+  return findCibilRepairRequestByPublicId(publicId);
+}
+
+module.exports = {
+  createCibilRepairRequest,
+  findCibilRepairRequestByPublicId,
+  findLatestCibilRepairRequestByUserId,
+  listCibilRepairRequests,
+  updateCibilRepairRequest
+};

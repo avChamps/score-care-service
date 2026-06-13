@@ -32,6 +32,8 @@ const {
 } = require("../controllers/legal-content.controller");
 const {
   getAdminCibilRepairContent,
+  getAdminCibilRepairRequests,
+  updateAdminCibilRepairRequest,
   saveAdminCibilRepairContent
 } = require("../controllers/cibil-repair-content.controller");
 const {
@@ -60,6 +62,13 @@ router.patch("/legal-content", requireAuth, requireAdmin, saveAdminLegalContentD
 router.get("/cibil-repair-content", requireAuth, requireAdmin, getAdminCibilRepairContent);
 router.post("/cibil-repair-content", requireAuth, requireAdmin, saveAdminCibilRepairContent);
 router.patch("/cibil-repair-content", requireAuth, requireAdmin, saveAdminCibilRepairContent);
+router.get("/cibil-repair-requests", requireAuth, requireAdmin, getAdminCibilRepairRequests);
+router.patch(
+  "/cibil-repair-requests/:publicId",
+  requireAuth,
+  requireAdmin,
+  updateAdminCibilRepairRequest
+);
 router.get("/loan-options", requireAuth, requireAdmin, getAdminLoanOptions);
 router.post("/loan-options", requireAuth, requireAdmin, saveAdminLoanOptions);
 router.patch("/loan-options", requireAuth, requireAdmin, saveAdminLoanOptions);

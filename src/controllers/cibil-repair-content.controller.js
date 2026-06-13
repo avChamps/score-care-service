@@ -3,6 +3,23 @@ const {
   listAllCibilRepairContent,
   replaceCibilRepairContent
 } = require("../models/cibil-repair-content.model");
+const {
+  createCibilRepairRequest,
+  findCibilRepairRequestByPublicId,
+  findLatestCibilRepairRequestByUserId,
+  listCibilRepairRequests,
+  updateCibilRepairRequest
+} = require("../models/cibil-repair-request.model");
+
+const paymentStatuses = new Set(["pending", "paid", "failed", "refunded"]);
+const repairStatuses = new Set([
+  "submitted",
+  "analysis",
+  "in_progress",
+  "resolved",
+  "closed",
+  "cancelled"
+]);
 
 function normalizeString(value) {
   return String(value || "").trim();
@@ -138,6 +155,108 @@ function validateCibilRepairContentPayload(body) {
   };
 }
 
+function toNonNegativeInteger(value, fieldName, errors) {
+  const number = Number(value || 0);
+
+  if (!Number.isInteger(number) || number < 0) {
+    errors.push(`${fieldName} must be a non-negative integer`);
+  }
+
+  return number;
+}
+
+function validateCibilRepairRequestPayload(body) {
+  const errors = [];
+  const planName = normalizeString(body.planName);
+  const amount = Number(body.amount);
+  const currency = normalizeString(body.currency || "INR").toUpperCase();
+  const paymentStatus = normalizeString(body.paymentStatus || "pending");
+  const repairStatus = normalizeString(body.repairStatus || "submitted");
+
+  if (!planName) {
+    errors.push("planName is required");
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    errors.push("amount must be a valid positive number");
+  }
+
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    errors.push("currency must be a 3-letter currency code");
+  }
+
+  if (!paymentStatuses.has(paymentStatus)) {
+    errors.push("Valid paymentStatus is required");
+  }
+
+  if (!repairStatuses.has(repairStatus)) {
+    errors.push("Valid repairStatus is required");
+  }
+
+  return {
+    errors,
+    value: {
+      planPublicId: normalizeNullableString(body.planPublicId || body.planId),
+      planName,
+      amount,
+      currency,
+      paymentStatus,
+      repairStatus,
+      remarks: normalizeNullableString(body.remarks)
+    }
+  };
+}
+
+function validateAdminCibilRepairRequestPayload(body) {
+  const errors = [];
+  const paymentStatus =
+    body.paymentStatus === undefined ? undefined : normalizeString(body.paymentStatus);
+  const repairStatus =
+    body.repairStatus === undefined ? undefined : normalizeString(body.repairStatus);
+  const progressItems = Array.isArray(body.progressItems)
+    ? body.progressItems.map((item) => ({
+        title: normalizeString(item.title),
+        status: normalizeString(item.status),
+        percent: toNonNegativeInteger(item.percent, "progressItems.percent", errors),
+        remarks: normalizeNullableString(item.remarks)
+      }))
+    : [];
+
+  const pointsGained =
+    body.pointsGained === undefined ? undefined : Number(body.pointsGained);
+
+  if (paymentStatus !== undefined && !paymentStatuses.has(paymentStatus)) {
+    errors.push("Valid paymentStatus is required");
+  }
+
+  if (repairStatus !== undefined && !repairStatuses.has(repairStatus)) {
+    errors.push("Valid repairStatus is required");
+  }
+
+  if (pointsGained !== undefined && !Number.isInteger(pointsGained)) {
+    errors.push("pointsGained must be an integer");
+  }
+
+  return {
+    errors,
+    value: {
+      paymentStatus,
+      repairStatus,
+      activeDisputes:
+        body.activeDisputes === undefined
+          ? undefined
+          : toNonNegativeInteger(body.activeDisputes, "activeDisputes", errors),
+      resolvedDisputes:
+        body.resolvedDisputes === undefined
+          ? undefined
+          : toNonNegativeInteger(body.resolvedDisputes, "resolvedDisputes", errors),
+      pointsGained,
+      progressItems: body.progressItems === undefined ? undefined : progressItems,
+      remarks: body.remarks === undefined ? undefined : normalizeNullableString(body.remarks)
+    }
+  };
+}
+
 async function getCibilRepairContent(_req, res, next) {
   try {
     const content = await listActiveCibilRepairContent();
@@ -187,8 +306,140 @@ async function saveAdminCibilRepairContent(req, res, next) {
   }
 }
 
+async function createMyCibilRepairRequest(req, res, next) {
+  try {
+    const { errors, value } = validateCibilRepairRequestPayload(req.body);
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        status: "error",
+        errors
+      });
+    }
+
+    const request = await createCibilRepairRequest(
+      req.auth.internalUserId,
+      req.auth.userId,
+      value
+    );
+
+    return res.status(201).json({
+      status: "success",
+      message: "CIBIL repair request saved successfully",
+      data: {
+        request
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getMyCibilRepairRequest(req, res, next) {
+  try {
+    const request = await findLatestCibilRepairRequestByUserId(req.auth.internalUserId);
+
+    return res.status(200).json({
+      status: "success",
+      data: {
+        request
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getMyCibilRepairStatus(req, res, next) {
+  try {
+    const request = await findLatestCibilRepairRequestByUserId(req.auth.internalUserId);
+
+    return res.status(200).json({
+      status: "success",
+      data: {
+        activeDisputes: request?.activeDisputes || 0,
+        resolvedDisputes: request?.resolvedDisputes || 0,
+        pointsGained: request?.pointsGained || 0,
+        repairStatus: request?.repairStatus || null,
+        remarks: request?.remarks || null
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getAdminCibilRepairRequests(_req, res, next) {
+  try {
+    const requests = await listCibilRepairRequests();
+
+    return res.status(200).json({
+      status: "success",
+      data: {
+        requests
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function updateAdminCibilRepairRequest(req, res, next) {
+  try {
+    const { errors, value } = validateAdminCibilRepairRequestPayload(req.body);
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        status: "error",
+        errors
+      });
+    }
+
+    const existingRequest = await findCibilRepairRequestByPublicId(req.params.publicId);
+
+    if (!existingRequest) {
+      return res.status(404).json({
+        status: "error",
+        message: "CIBIL repair request not found"
+      });
+    }
+
+    const request = await updateCibilRepairRequest(req.params.publicId, {
+      paymentStatus: value.paymentStatus ?? existingRequest.paymentStatus,
+      repairStatus: value.repairStatus ?? existingRequest.repairStatus,
+      activeDisputes: value.activeDisputes ?? existingRequest.activeDisputes,
+      resolvedDisputes: value.resolvedDisputes ?? existingRequest.resolvedDisputes,
+      pointsGained: value.pointsGained ?? existingRequest.pointsGained,
+      progressItems: value.progressItems ?? existingRequest.progressItems,
+      remarks: value.remarks === undefined ? existingRequest.remarks : value.remarks
+    });
+
+    if (!request) {
+      return res.status(404).json({
+        status: "error",
+        message: "CIBIL repair request not found"
+      });
+    }
+
+    return res.status(200).json({
+      status: "success",
+      message: "CIBIL repair request updated successfully",
+      data: {
+        request
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
+  createMyCibilRepairRequest,
   getAdminCibilRepairContent,
+  getAdminCibilRepairRequests,
   getCibilRepairContent,
-  saveAdminCibilRepairContent
+  getMyCibilRepairRequest,
+  getMyCibilRepairStatus,
+  saveAdminCibilRepairContent,
+  updateAdminCibilRepairRequest
 };
