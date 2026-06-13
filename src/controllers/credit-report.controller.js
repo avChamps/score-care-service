@@ -18,7 +18,8 @@ const {
   saveCibilReport,
   saveExperianReport,
   saveExperianScore,
-  saveCibilReportPdfBase64
+  saveCibilReportPdfBase64,
+  saveCreditReportDownload
 } = require("../models/credit-report.model");
 const {
   findUserById
@@ -1743,6 +1744,7 @@ async function downloadCibilCreditReport(req, res, next) {
     }
 
     const pdfBuffer = await createCibilReportPdfBuffer(savedReport);
+    await saveCreditReportDownload(internalUserId, savedReport.id, savedReport.reportType);
 
     return sendPdfBuffer(res, savedReport, pdfBuffer);
   } catch (error) {

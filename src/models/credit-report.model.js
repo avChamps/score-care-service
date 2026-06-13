@@ -241,6 +241,19 @@ async function saveCibilReportPdfBase64(userId, creditReportBase64) {
   return findCibilReportByUserId(userId);
 }
 
+async function saveCreditReportDownload(userId, creditReportId, reportType) {
+  await pool.query(
+    `INSERT INTO credit_report_downloads (
+      user_id,
+      credit_report_id,
+      report_type,
+      downloaded_at
+    )
+    VALUES (?, ?, ?, NOW())`,
+    [userId, creditReportId || null, reportType]
+  );
+}
+
 module.exports = {
   findCibilReportByUserId,
   findExperianReportByUserId,
@@ -249,5 +262,6 @@ module.exports = {
   saveCibilReport,
   saveExperianReport,
   saveExperianScore,
-  saveCibilReportPdfBase64
+  saveCibilReportPdfBase64,
+  saveCreditReportDownload
 };
