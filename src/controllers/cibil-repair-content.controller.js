@@ -354,6 +354,8 @@ async function getMyCibilRepairRequest(req, res, next) {
     return res.status(200).json({
       status: "success",
       data: {
+        activeDisputes: requests[0]?.activeDisputes || 0,
+        resolvedDisputes: requests[0]?.resolvedDisputes || 0,
         requests
       }
     });
