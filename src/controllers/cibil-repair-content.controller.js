@@ -96,7 +96,7 @@ function normalizePlans(plans, errors) {
       planName,
       amount,
       currency,
-      billingCycle: normalizeNullableString(plan.billingCycle),
+      offerTag: normalizeNullableString(plan.offerTag),
       buttonLabel: normalizeNullableString(plan.buttonLabel),
       displayOrder,
       isActive
