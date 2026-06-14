@@ -254,11 +254,34 @@ async function saveCreditReportDownload(userId, creditReportId, reportType) {
   );
 }
 
+async function listCreditReportDownloadsByUserId(userId) {
+  const [rows] = await pool.query(
+    `SELECT
+      crd.id,
+      crd.credit_report_id AS creditReportId,
+      crd.report_type AS reportType,
+      cr.provider,
+      cr.credit_score AS creditScore,
+      cr.fetched_at AS reportFetchedAt,
+      crd.downloaded_at AS downloadedAt,
+      crd.created_at AS createdAt
+    FROM credit_report_downloads crd
+    LEFT JOIN credit_reports cr
+      ON cr.id = crd.credit_report_id
+    WHERE crd.user_id = ?
+    ORDER BY crd.downloaded_at DESC, crd.id DESC`,
+    [userId]
+  );
+
+  return rows;
+}
+
 module.exports = {
   findCibilReportByUserId,
   findExperianReportByUserId,
   findExperianScoreByUserId,
   findLatestSavedCreditReportByUserId,
+  listCreditReportDownloadsByUserId,
   saveCibilReport,
   saveExperianReport,
   saveExperianScore,

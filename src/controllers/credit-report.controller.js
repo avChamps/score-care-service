@@ -15,6 +15,7 @@ const {
   findExperianReportByUserId,
   findExperianScoreByUserId,
   findLatestSavedCreditReportByUserId,
+  listCreditReportDownloadsByUserId,
   saveCibilReport,
   saveExperianReport,
   saveExperianScore,
@@ -1756,8 +1757,24 @@ async function downloadCibilCreditReport(req, res, next) {
   }
 }
 
+async function getCreditReportDownloads(req, res, next) {
+  try {
+    const internalUserId = getAuthInternalUserId(req);
+    const downloads = await listCreditReportDownloadsByUserId(internalUserId);
+
+    return res.status(200).json({
+      status: "success",
+      message: "Credit report downloads fetched successfully",
+      data: downloads
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   downloadCibilCreditReport,
+  getCreditReportDownloads,
   getExperianCreditReport,
   getExperianCreditScore,
   getSavedCibilCreditReport,
