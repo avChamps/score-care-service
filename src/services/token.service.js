@@ -3,9 +3,7 @@ const jwt = require("jsonwebtoken");
 const env = require("../config/env");
 
 function createAuthToken(payload) {
-  return jwt.sign(payload, env.jwt.secret, {
-    expiresIn: env.jwt.expiresIn
-  });
+  return jwt.sign(payload, env.jwt.secret);
 }
 
 function verifyAuthToken(token) {

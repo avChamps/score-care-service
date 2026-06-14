@@ -102,7 +102,6 @@ async function verifyOtp(req, res, next) {
       data: {
         token,
         tokenType: "Bearer",
-        expiresIn: "7d",
         mobileNumber,
         user,
         isNewUser,
