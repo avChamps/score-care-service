@@ -30,6 +30,8 @@ function mapCibilRepairRequest(row) {
     amount: Number(row.amount),
     currency: row.currency,
     paymentStatus: row.paymentStatus,
+    razorpayOrderId: row.razorpayOrderId,
+    razorpayPaymentId: row.razorpayPaymentId,
     repairStatus: row.repairStatus,
     activeDisputes: Number(row.activeDisputes),
     resolvedDisputes: Number(row.resolvedDisputes),
@@ -50,6 +52,8 @@ function requestSelect() {
     amount,
     currency,
     payment_status AS paymentStatus,
+    razorpay_order_id AS razorpayOrderId,
+    razorpay_payment_id AS razorpayPaymentId,
     repair_status AS repairStatus,
     active_disputes AS activeDisputes,
     resolved_disputes AS resolvedDisputes,
@@ -74,10 +78,12 @@ async function createCibilRepairRequest(userId, userPublicId, request) {
       amount,
       currency,
       payment_status,
+      razorpay_order_id,
+      razorpay_payment_id,
       repair_status,
       remarks
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       publicId,
       userId,
@@ -87,6 +93,8 @@ async function createCibilRepairRequest(userId, userPublicId, request) {
       request.amount,
       request.currency,
       request.paymentStatus,
+      request.razorpayOrderId,
+      request.razorpayPaymentId,
       request.repairStatus,
       request.remarks
     ]

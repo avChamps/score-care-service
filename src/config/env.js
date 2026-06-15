@@ -9,6 +9,11 @@ const env = {
   jwt: {
     secret: process.env.JWT_SECRET || "change-this-scorecare-secret"
   },
+  razorpay: {
+    keyId: process.env.RAZORPAY_KEY_ID || "",
+    keySecret: process.env.RAZORPAY_KEY_SECRET || "",
+    baseUrl: process.env.RAZORPAY_BASE_URL || "https://api.razorpay.com"
+  },
 msg91: {
   authKey: process.env.MSG91_AUTH_KEY,
   enabled: process.env.MSG91_ENABLED === "true",

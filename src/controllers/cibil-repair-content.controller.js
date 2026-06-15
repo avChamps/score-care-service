@@ -17,6 +17,11 @@ const {
   createCibilRepairRequestUpdatedNotification
 } = require("../models/notification.model");
 const { findUserByPublicId } = require("../models/user.model");
+const {
+  createRazorpayOrder,
+  getRazorpayCredentials,
+  verifyRazorpayPaymentSignature
+} = require("../services/razorpay.service");
 
 const paymentStatuses = new Set(["pending", "paid", "failed", "refunded"]);
 const repairStatuses = new Set([
@@ -179,6 +184,9 @@ function validateCibilRepairRequestPayload(body) {
   const currency = normalizeString(body.currency || "INR").toUpperCase();
   const paymentStatus = normalizeString(body.paymentStatus || "pending");
   const repairStatus = normalizeString(body.repairStatus || "submitted");
+  const razorpayOrderId = normalizeString(body.razorpayOrderId);
+  const razorpayPaymentId = normalizeString(body.razorpayPaymentId);
+  const razorpaySignature = normalizeString(body.razorpaySignature);
 
   if (!planName) {
     errors.push("planName is required");
@@ -200,6 +208,18 @@ function validateCibilRepairRequestPayload(body) {
     errors.push("Valid repairStatus is required");
   }
 
+  if (!razorpayOrderId) {
+    errors.push("razorpayOrderId is required");
+  }
+
+  if (!razorpayPaymentId) {
+    errors.push("razorpayPaymentId is required");
+  }
+
+  if (!razorpaySignature) {
+    errors.push("razorpaySignature is required");
+  }
+
   return {
     errors,
     value: {
@@ -208,8 +228,40 @@ function validateCibilRepairRequestPayload(body) {
       amount,
       currency,
       paymentStatus,
+      razorpayOrderId,
+      razorpayPaymentId,
+      razorpaySignature,
       repairStatus,
       remarks: normalizeNullableString(body.remarks)
+    }
+  };
+}
+
+function validateCibilRepairPaymentOrderPayload(body) {
+  const errors = [];
+  const planName = normalizeString(body.planName);
+  const amount = Number(body.amount);
+  const currency = normalizeString(body.currency || "INR").toUpperCase();
+
+  if (!planName) {
+    errors.push("planName is required");
+  }
+
+  if (!Number.isFinite(amount) || amount <= 0) {
+    errors.push("amount must be a valid positive number");
+  }
+
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    errors.push("currency must be a 3-letter currency code");
+  }
+
+  return {
+    errors,
+    value: {
+      planPublicId: normalizeNullableString(body.planPublicId || body.planId),
+      planName,
+      amount,
+      currency
     }
   };
 }
@@ -324,10 +376,22 @@ async function createMyCibilRepairRequest(req, res, next) {
       });
     }
 
+    const isVerified = verifyRazorpayPaymentSignature(value);
+
+    if (!isVerified) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid Razorpay payment signature"
+      });
+    }
+
     const request = await createCibilRepairRequest(
       req.auth.internalUserId,
       req.auth.userId,
-      value
+      {
+        ...value,
+        paymentStatus: "paid"
+      }
     );
     const notification = await createCibilRepairRequestCreatedNotification(
       req.auth.internalUserId,
@@ -340,6 +404,40 @@ async function createMyCibilRepairRequest(req, res, next) {
       data: {
         request,
         notification
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function createMyCibilRepairPaymentOrder(req, res, next) {
+  try {
+    const { errors, value } = validateCibilRepairPaymentOrderPayload(req.body);
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        status: "error",
+        errors
+      });
+    }
+
+    const order = await createRazorpayOrder({
+      amount: value.amount,
+      currency: value.currency,
+      receipt: `repair_${req.auth.internalUserId}_${Date.now()}`,
+      notes: {
+        userId: req.auth.userId,
+        planPublicId: value.planPublicId || "",
+        planName: value.planName
+      }
+    });
+
+    return res.status(201).json({
+      status: "success",
+      data: {
+        keyId: getRazorpayCredentials().keyId,
+        order
       }
     });
   } catch (error) {
@@ -498,6 +596,7 @@ async function updateAdminCibilRepairRequest(req, res, next) {
 }
 
 module.exports = {
+  createMyCibilRepairPaymentOrder,
   createMyCibilRepairRequest,
   getAdminCibilRepairContent,
   getAdminCibilRepairRequests,
