@@ -71,6 +71,8 @@ function normalizePlans(plans, errors) {
     const planName = normalizeString(plan.planName);
     const amount = Number(plan.amount);
     const currency = normalizeString(plan.currency || "INR").toUpperCase();
+    const gstPercentage =
+      plan.gstPercentage === undefined ? 0 : Number(plan.gstPercentage);
     const displayOrder =
       plan.displayOrder === undefined ? index + 1 : Number(plan.displayOrder);
     const isActive =
@@ -88,6 +90,10 @@ function normalizePlans(plans, errors) {
       errors.push(`plans[${index}].currency must be a 3-letter currency code`);
     }
 
+    if (!Number.isFinite(gstPercentage) || gstPercentage < 0) {
+      errors.push(`plans[${index}].gstPercentage must be a valid non-negative number`);
+    }
+
     if (!Number.isInteger(displayOrder) || displayOrder < 0) {
       errors.push(`plans[${index}].displayOrder must be a non-negative integer`);
     }
@@ -101,6 +107,7 @@ function normalizePlans(plans, errors) {
       planName,
       amount,
       currency,
+      gstPercentage,
       offerTag: normalizeNullableString(plan.offerTag),
       buttonLabel: normalizeNullableString(plan.buttonLabel),
       displayOrder,
