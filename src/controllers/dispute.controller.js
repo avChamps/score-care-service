@@ -4,8 +4,10 @@ const {
   listDisputesByUserId
 } = require("../models/dispute.model");
 const {
+  deleteSavedFiles,
   deleteDisputeUploadedFiles,
-  getDisputeUploadedDocuments
+  mapDisputeDocuments,
+  saveDisputeUploadedFiles
 } = require("../utils/upload-assets");
 
 function normalizeString(value) {
@@ -83,13 +85,15 @@ function validateDisputePayload(req) {
       ]),
       errorType,
       bureaus: Array.isArray(bureaus) ? bureaus : [],
-      additionalDetails: normalizeNullableString(body.additionalDetails),
-      documents: getDisputeUploadedDocuments(files)
+      additionalDetails: normalizeNullableString(body.additionalDetails)
     }
   };
 }
 
 async function submitDispute(req, res, next) {
+  let documents = {};
+  let savedFiles = [];
+
   try {
     const { errors, value } = validateDisputePayload(req);
 
@@ -105,10 +109,16 @@ async function submitDispute(req, res, next) {
       });
     }
 
+    savedFiles = await saveDisputeUploadedFiles(req.auth.userId, req.files);
+    documents = mapDisputeDocuments(savedFiles);
+
     const dispute = await createDispute(
       req.auth.internalUserId,
       req.auth.userId,
-      value
+      {
+        ...value,
+        documents
+      }
     );
 
     return res.status(201).json({
@@ -121,7 +131,7 @@ async function submitDispute(req, res, next) {
       }
     });
   } catch (error) {
-    await deleteDisputeUploadedFiles(req.files);
+    await deleteSavedFiles({ disputeDocuments: savedFiles });
     next(error);
   }
 }

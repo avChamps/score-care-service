@@ -76,6 +76,10 @@ function getRelativePath(publicId, fileName) {
   return path.posix.join(publicId, "files", fileName);
 }
 
+function getDisputeRelativePath(publicId, fileName) {
+  return path.posix.join(publicId, "dispute-assets", "files", fileName);
+}
+
 function getPublicUrl(relativePath) {
   const baseUrl = env.assets.publicBaseUrl.replace(/\/+$/, "");
 
@@ -214,6 +218,73 @@ async function saveUploadedFiles(publicId, filesByField = {}) {
   return saveFilesLocally(publicId, files);
 }
 
+async function saveDisputeFileLocally(publicId, file) {
+  const fileName = buildDisputeFileName(file);
+  const relativePath = getDisputeRelativePath(publicId, fileName);
+  const fullPath = getLocalPath(relativePath);
+
+  await fs.mkdir(path.dirname(fullPath), { recursive: true });
+  await fs.writeFile(fullPath, file.buffer);
+
+  return mapSavedFile(file, fileName, relativePath);
+}
+
+async function saveDisputeFilesLocally(publicId, files) {
+  const savedFiles = [];
+
+  try {
+    for (const file of files) {
+      savedFiles.push(await saveDisputeFileLocally(publicId, file));
+    }
+  } catch (error) {
+    await Promise.all(
+      savedFiles.map((file) => fs.unlink(getLocalPath(file.relativePath)).catch(() => null))
+    );
+    throw error;
+  }
+
+  return savedFiles;
+}
+
+async function saveDisputeFilesToSftp(publicId, files) {
+  return withSftp(async (sftp) => {
+    const savedFiles = [];
+    const remoteDir = getSftpRemotePath(
+      path.posix.join(publicId, "dispute-assets", "files")
+    );
+
+    await sftp.mkdir(remoteDir, true);
+
+    try {
+      for (const file of files) {
+        const fileName = buildDisputeFileName(file);
+        const relativePath = getDisputeRelativePath(publicId, fileName);
+        const remotePath = getSftpRemotePath(relativePath);
+
+        await sftp.put(file.buffer, remotePath);
+        savedFiles.push(mapSavedFile(file, fileName, relativePath));
+      }
+    } catch (error) {
+      await Promise.all(
+        savedFiles.map((file) => sftp.delete(getSftpRemotePath(file.relativePath)).catch(() => null))
+      );
+      throw error;
+    }
+
+    return savedFiles;
+  });
+}
+
+async function saveDisputeUploadedFiles(publicId, filesByField = {}) {
+  const files = flattenUploadedFiles(filesByField);
+
+  if (env.assets.storageDriver === "sftp") {
+    return saveDisputeFilesToSftp(publicId, files);
+  }
+
+  return saveDisputeFilesLocally(publicId, files);
+}
+
 async function deleteSavedFiles(documents = {}) {
   const files = flattenSavedDocuments(documents);
 
@@ -299,21 +370,9 @@ function loanApplicationUpload(req, res, next) {
   });
 }
 
-function getDisputeUploadedDocuments(files = {}) {
-  const baseUrl = env.assets.publicBaseUrl.replace(/\/+$/, "");
-
-  return Object.entries(files).reduce((documents, [fieldName, uploadedFiles]) => {
-    const file = uploadedFiles[0];
-
-    if (file) {
-      const relativePath = path
-        .relative(env.assets.rootDir, file.path)
-        .split(path.sep)
-        .join(path.posix.sep);
-
-      documents[fieldName] = `${baseUrl}/${relativePath}`;
-    }
-
+function mapDisputeDocuments(savedFiles = []) {
+  return savedFiles.reduce((documents, file) => {
+    documents[file.fieldName] = file.url;
     return documents;
   }, {});
 }
@@ -327,30 +386,7 @@ async function deleteDisputeUploadedFiles(files = {}) {
 }
 
 const disputeUpload = multer({
-  storage: multer.diskStorage({
-    destination(req, _file, callback) {
-      const publicId = sanitizePathSegment(req.auth?.userId || req.body.userPublicId);
-
-      if (!publicId) {
-        callback(new Error("userPublicId is required"));
-        return;
-      }
-
-      const uploadDir = path.join(
-        env.assets.rootDir,
-        publicId,
-        "dispute-assets",
-        "files"
-      );
-
-      fs.mkdir(uploadDir, { recursive: true })
-        .then(() => callback(null, uploadDir))
-        .catch(callback);
-    },
-    filename(_req, file, callback) {
-      callback(null, buildDisputeFileName(file));
-    }
-  }),
+  storage: multer.memoryStorage(),
   fileFilter(_req, file, callback) {
     const ext = path.extname(file.originalname || "").toLowerCase();
 
@@ -388,10 +424,11 @@ module.exports = {
   deleteSavedFiles,
   deleteDisputeUploadedFiles,
   disputeDocumentUpload,
-  getDisputeUploadedDocuments,
   getPublicIdFromRequest,
   loanApplicationUpload,
+  mapDisputeDocuments,
   readSavedFile,
+  saveDisputeUploadedFiles,
   saveUploadedFiles,
   uploadFields
 };
