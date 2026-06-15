@@ -15,6 +15,14 @@ const allowedMimeTypes = new Set([
   "image/webp"
 ]);
 
+const disputeAllowedMimeTypes = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/png"
+]);
+
+const disputeAllowedExtensions = new Set([".pdf", ".jpg", ".jpeg", ".png"]);
+
 const uploadFields = [
   { name: "salarySlips", maxCount: 8 },
   { name: "bankStatements", maxCount: 3 },
@@ -40,6 +48,15 @@ function sanitizeFileBaseName(fileName) {
     .slice(0, 80);
 
   return baseName || "file";
+}
+
+function buildDisputeFileName(file) {
+  const ext = path.extname(file.originalname || "").toLowerCase();
+  const timestamp = Date.now();
+  const randomSuffix = crypto.randomBytes(8).toString("hex");
+  const safeFieldName = sanitizeFileBaseName(file.fieldname);
+
+  return `${safeFieldName}-${timestamp}-${randomSuffix}${ext}`;
 }
 
 function getPublicIdFromRequest(req) {
@@ -282,8 +299,96 @@ function loanApplicationUpload(req, res, next) {
   });
 }
 
+function getDisputeUploadedDocuments(files = {}) {
+  const baseUrl = env.assets.publicBaseUrl.replace(/\/+$/, "");
+
+  return Object.entries(files).reduce((documents, [fieldName, uploadedFiles]) => {
+    const file = uploadedFiles[0];
+
+    if (file) {
+      const relativePath = path
+        .relative(env.assets.rootDir, file.path)
+        .split(path.sep)
+        .join(path.posix.sep);
+
+      documents[fieldName] = `${baseUrl}/${relativePath}`;
+    }
+
+    return documents;
+  }, {});
+}
+
+async function deleteDisputeUploadedFiles(files = {}) {
+  const uploadedFiles = flattenUploadedFiles(files);
+
+  await Promise.all(
+    uploadedFiles.map((file) => fs.unlink(file.path).catch(() => null))
+  );
+}
+
+const disputeUpload = multer({
+  storage: multer.diskStorage({
+    destination(req, _file, callback) {
+      const publicId = sanitizePathSegment(req.auth?.userId || req.body.userPublicId);
+
+      if (!publicId) {
+        callback(new Error("userPublicId is required"));
+        return;
+      }
+
+      const uploadDir = path.join(
+        env.assets.rootDir,
+        publicId,
+        "dispute-assets",
+        "files"
+      );
+
+      fs.mkdir(uploadDir, { recursive: true })
+        .then(() => callback(null, uploadDir))
+        .catch(callback);
+    },
+    filename(_req, file, callback) {
+      callback(null, buildDisputeFileName(file));
+    }
+  }),
+  fileFilter(_req, file, callback) {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+
+    if (!disputeAllowedMimeTypes.has(file.mimetype) || !disputeAllowedExtensions.has(ext)) {
+      const error = new Error("Only PDF, JPG, JPEG, and PNG uploads are allowed");
+      error.statusCode = 400;
+      callback(error);
+      return;
+    }
+
+    callback(null, true);
+  },
+  limits: {
+    fileSize: 10 * 1024 * 1024,
+    files: 4
+  }
+});
+
+function disputeDocumentUpload(req, res, next) {
+  disputeUpload.fields([
+    { name: "closureCertificate", maxCount: 1 },
+    { name: "paymentReceipt", maxCount: 1 },
+    { name: "bankStatement", maxCount: 1 },
+    { name: "identityProof", maxCount: 1 }
+  ])(req, res, (error) => {
+    if (error) {
+      return handleMulterError(error, req, res, next);
+    }
+
+    return next();
+  });
+}
+
 module.exports = {
   deleteSavedFiles,
+  deleteDisputeUploadedFiles,
+  disputeDocumentUpload,
+  getDisputeUploadedDocuments,
   getPublicIdFromRequest,
   loanApplicationUpload,
   readSavedFile,
