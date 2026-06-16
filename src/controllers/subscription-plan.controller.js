@@ -9,10 +9,12 @@ const {
   updateGatewaySubscriptionStatus,
   updateSubscriptionPlanByPublicId
 } = require("../models/subscription-plan.model");
+const { findUserById } = require("../models/user.model");
 const {
-  createRazorpaySubscription,
+  createRazorpayCustomer,
+  createRazorpayOrder,
   getRazorpayCredentials,
-  verifyRazorpaySubscriptionSignature,
+  verifyRazorpayPaymentSignature,
   verifyRazorpayWebhookSignature
 } = require("../services/razorpay.service");
 
@@ -221,34 +223,8 @@ function validateSubscriptionPlanPayload(body, { isCreate = false } = {}) {
   return { errors, value };
 }
 
-function validateCreateGatewaySubscriptionPayload(body) {
-  const errors = [];
-  const totalCount = Number(body.totalCount || 12);
-
-  if (!Number.isInteger(totalCount) || totalCount <= 0) {
-    errors.push("totalCount must be a positive integer");
-  }
-
-  return {
-    errors,
-    value: {
-      totalCount,
-      customerNotify: body.customerNotify !== false
-    }
-  };
-}
-
 async function createGatewaySubscription(req, res, next) {
   try {
-    const { errors, value } = validateCreateGatewaySubscriptionPayload(req.body);
-
-    if (errors.length > 0) {
-      return res.status(400).json({
-        status: "error",
-        errors
-      });
-    }
-
     const plan = await findSubscriptionPlanByPublicId(req.params.publicId);
 
     if (!plan || !plan.isActive) {
@@ -258,17 +234,24 @@ async function createGatewaySubscription(req, res, next) {
       });
     }
 
-    if (!plan.razorpayPlanId) {
-      return res.status(400).json({
-        status: "error",
-        message: "Razorpay plan is not configured for this subscription plan"
-      });
-    }
+    const user = await findUserById(req.auth.internalUserId);
+    const customer = await createRazorpayCustomer({
+      name: user.fullName || user.mobileNumber,
+      email: user.email || undefined,
+      contact: user.mobileNumber
+    });
 
-    const subscription = await createRazorpaySubscription({
-      planId: plan.razorpayPlanId,
-      totalCount: value.totalCount,
-      customerNotify: value.customerNotify,
+    const order = await createRazorpayOrder({
+      amount: plan.amount,
+      currency: plan.currency,
+      customerId: customer.id,
+      method: "upi",
+      receipt: `sub_${req.auth.internalUserId}_${Date.now()}`,
+      token: {
+        max_amount: Math.round(Number(plan.amount) * 100),
+        expire_at: Math.floor(Date.now() / 1000) + 30 * 365 * 24 * 60 * 60,
+        frequency: "as_presented"
+      },
       notes: {
         userId: req.auth.userId,
         internalUserId: String(req.auth.internalUserId),
@@ -279,15 +262,17 @@ async function createGatewaySubscription(req, res, next) {
     await setPendingGatewaySubscription({
       userId: req.auth.internalUserId,
       planPublicId: plan.publicId,
-      razorpaySubscriptionId: subscription.id
+      razorpaySubscriptionId: null
     });
 
     return res.status(201).json({
       status: "success",
       data: {
         keyId: getRazorpayCredentials().keyId,
+        customerId: customer.id,
+        recurring: "1",
         plan,
-        subscription
+        order
       }
     });
   } catch (error) {
@@ -297,20 +282,20 @@ async function createGatewaySubscription(req, res, next) {
 
 async function confirmGatewaySubscriptionPayment(req, res, next) {
   try {
+    const razorpayOrderId = normalizeString(req.body.razorpayOrderId);
     const razorpayPaymentId = normalizeString(req.body.razorpayPaymentId);
-    const razorpaySubscriptionId = normalizeString(req.body.razorpaySubscriptionId);
     const razorpaySignature = normalizeString(req.body.razorpaySignature);
 
-    if (!razorpayPaymentId || !razorpaySubscriptionId || !razorpaySignature) {
+    if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
       return res.status(400).json({
         status: "error",
-        message: "razorpayPaymentId, razorpaySubscriptionId and razorpaySignature are required"
+        message: "razorpayOrderId, razorpayPaymentId and razorpaySignature are required"
       });
     }
 
-    const isValidSignature = verifyRazorpaySubscriptionSignature({
+    const isValidSignature = verifyRazorpayPaymentSignature({
+      razorpayOrderId,
       razorpayPaymentId,
-      razorpaySubscriptionId,
       razorpaySignature
     });
 
@@ -323,7 +308,7 @@ async function confirmGatewaySubscriptionPayment(req, res, next) {
 
     await updateGatewaySubscriptionPayment({
       userId: req.auth.internalUserId,
-      razorpaySubscriptionId,
+      razorpaySubscriptionId: null,
       razorpayPaymentId,
       amount: Number(req.body.amount || 0),
       currency: normalizeString(req.body.currency || "INR").toUpperCase(),
@@ -331,6 +316,7 @@ async function confirmGatewaySubscriptionPayment(req, res, next) {
       paidAt: new Date(),
       currentEnd: null,
       notes: {
+        razorpayOrderId,
         source: "checkout_confirm"
       }
     });

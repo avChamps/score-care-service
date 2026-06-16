@@ -265,16 +265,28 @@ async function setPendingGatewaySubscription({
     return null;
   }
 
-  await pool.query(
-    `UPDATE users
-    SET
-      subscription_plan_id = ?,
-      razorpay_subscription_id = ?,
-      subscription_status = 'past_due',
-      updated_at = NOW()
-    WHERE id = ?`,
-    [planRows[0].id, razorpaySubscriptionId, userId]
-  );
+  if (razorpaySubscriptionId) {
+    await pool.query(
+      `UPDATE users
+      SET
+        subscription_plan_id = ?,
+        razorpay_subscription_id = ?,
+        subscription_status = 'past_due',
+        updated_at = NOW()
+      WHERE id = ?`,
+      [planRows[0].id, razorpaySubscriptionId, userId]
+    );
+  } else {
+    await pool.query(
+      `UPDATE users
+      SET
+        subscription_plan_id = ?,
+        subscription_status = 'past_due',
+        updated_at = NOW()
+      WHERE id = ?`,
+      [planRows[0].id, userId]
+    );
+  }
 
   return findSubscriptionPlanByPublicId(planPublicId);
 }
@@ -317,59 +329,113 @@ async function updateGatewaySubscriptionPayment({
     const subscriptionDueAt = currentEnd || addBillingCycle(subscriptionStartedAt, billingCycle);
     const subscriptionStatus = paymentStatus === "paid" ? "active" : "past_due";
 
-    await connection.query(
-      `UPDATE users
-      SET
-        razorpay_subscription_id = ?,
-        subscription_status = ?,
-        subscription_started_at = COALESCE(subscription_started_at, ?),
-        subscription_due_at = ?,
-        subscription_ends_at = ?,
-        updated_at = NOW()
-      WHERE id = ?`,
-      [
-        razorpaySubscriptionId,
-        subscriptionStatus,
-        subscriptionStartedAt,
-        subscriptionDueAt,
-        subscriptionDueAt,
-        user.id
-      ]
-    );
+    if (razorpaySubscriptionId) {
+      await connection.query(
+        `UPDATE users
+        SET
+          razorpay_subscription_id = ?,
+          subscription_status = ?,
+          subscription_started_at = COALESCE(subscription_started_at, ?),
+          subscription_due_at = ?,
+          subscription_ends_at = ?,
+          updated_at = NOW()
+        WHERE id = ?`,
+        [
+          razorpaySubscriptionId,
+          subscriptionStatus,
+          subscriptionStartedAt,
+          subscriptionDueAt,
+          subscriptionDueAt,
+          user.id
+        ]
+      );
+    } else {
+      await connection.query(
+        `UPDATE users
+        SET
+          subscription_status = ?,
+          subscription_started_at = COALESCE(subscription_started_at, ?),
+          subscription_due_at = ?,
+          subscription_ends_at = ?,
+          updated_at = NOW()
+        WHERE id = ?`,
+        [
+          subscriptionStatus,
+          subscriptionStartedAt,
+          subscriptionDueAt,
+          subscriptionDueAt,
+          user.id
+        ]
+      );
+    }
 
-    await connection.query(
-      `INSERT INTO subscription_payments (
-        user_id,
-        subscription_plan_id,
-        amount,
-        currency,
-        payment_status,
-        payment_gateway,
-        razorpay_subscription_id,
-        razorpay_payment_id,
-        paid_at,
-        gateway_payload
-      )
-      VALUES (?, ?, ?, ?, ?, 'razorpay', ?, ?, ?, ?)
-      ON DUPLICATE KEY UPDATE
-        amount = VALUES(amount),
-        currency = VALUES(currency),
-        payment_status = VALUES(payment_status),
-        paid_at = VALUES(paid_at),
-        gateway_payload = VALUES(gateway_payload),
-        updated_at = NOW()`,
-      [
-        user.id,
-        user.subscription_plan_id,
-        amount,
-        currency,
-        paymentStatus,
-        razorpaySubscriptionId,
-        razorpayPaymentId,
-        paidAt,
-        JSON.stringify(notes || {})
-      ]
-    );
+    if (razorpaySubscriptionId) {
+      await connection.query(
+        `INSERT INTO subscription_payments (
+          user_id,
+          subscription_plan_id,
+          amount,
+          currency,
+          payment_status,
+          payment_gateway,
+          razorpay_subscription_id,
+          razorpay_payment_id,
+          paid_at,
+          gateway_payload
+        )
+        VALUES (?, ?, ?, ?, ?, 'razorpay', ?, ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          amount = VALUES(amount),
+          currency = VALUES(currency),
+          payment_status = VALUES(payment_status),
+          paid_at = VALUES(paid_at),
+          gateway_payload = VALUES(gateway_payload),
+          updated_at = NOW()`,
+        [
+          user.id,
+          user.subscription_plan_id,
+          amount,
+          currency,
+          paymentStatus,
+          razorpaySubscriptionId,
+          razorpayPaymentId,
+          paidAt,
+          JSON.stringify(notes || {})
+        ]
+      );
+    } else {
+      await connection.query(
+        `INSERT INTO subscription_payments (
+          user_id,
+          subscription_plan_id,
+          amount,
+          currency,
+          payment_status,
+          payment_gateway,
+          razorpay_payment_id,
+          paid_at,
+          gateway_payload
+        )
+        VALUES (?, ?, ?, ?, ?, 'razorpay', ?, ?, ?)
+        ON DUPLICATE KEY UPDATE
+          amount = VALUES(amount),
+          currency = VALUES(currency),
+          payment_status = VALUES(payment_status),
+          paid_at = VALUES(paid_at),
+          gateway_payload = VALUES(gateway_payload),
+          updated_at = NOW()`,
+        [
+          user.id,
+          user.subscription_plan_id,
+          amount,
+          currency,
+          paymentStatus,
+          razorpayPaymentId,
+          paidAt,
+          JSON.stringify(notes || {})
+        ]
+      );
+    }
 
     await connection.commit();
 

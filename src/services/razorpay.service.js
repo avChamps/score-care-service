@@ -12,23 +12,74 @@ function getRazorpayCredentials() {
   return env.razorpay;
 }
 
-async function createRazorpayOrder({ amount, currency, receipt, notes }) {
+async function createRazorpayCustomer({ name, email, contact }) {
   const credentials = getRazorpayCredentials();
   const auth = Buffer.from(
     `${credentials.keyId}:${credentials.keySecret}`
   ).toString("base64");
-  const response = await fetch(`${credentials.baseUrl}/v1/orders`, {
+  const response = await fetch(`${credentials.baseUrl}/v1/customers`, {
     method: "POST",
     headers: {
       Authorization: `Basic ${auth}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      amount: Math.round(Number(amount) * 100),
-      currency,
-      receipt,
-      notes
+      name,
+      email,
+      contact,
+      fail_existing: "0"
     })
+  });
+  const data = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    const error = new Error(data.error?.description || "Unable to create Razorpay customer");
+    error.statusCode = response.status;
+    throw error;
+  }
+
+  return data;
+}
+
+async function createRazorpayOrder({
+  amount,
+  currency,
+  receipt,
+  notes,
+  customerId,
+  method,
+  token
+}) {
+  const credentials = getRazorpayCredentials();
+  const auth = Buffer.from(
+    `${credentials.keyId}:${credentials.keySecret}`
+  ).toString("base64");
+  const payload = {
+    amount: Math.round(Number(amount) * 100),
+    currency,
+    receipt,
+    notes
+  };
+
+  if (customerId) {
+    payload.customer_id = customerId;
+  }
+
+  if (method) {
+    payload.method = method;
+  }
+
+  if (token) {
+    payload.token = token;
+  }
+
+  const response = await fetch(`${credentials.baseUrl}/v1/orders`, {
+    method: "POST",
+    headers: {
+      Authorization: `Basic ${auth}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify(payload)
   });
   const data = await response.json().catch(() => ({}));
 
@@ -142,6 +193,7 @@ function verifyRazorpayPaymentSignature({
 }
 
 module.exports = {
+  createRazorpayCustomer,
   createRazorpayOrder,
   createRazorpaySubscription,
   getRazorpayCredentials,
