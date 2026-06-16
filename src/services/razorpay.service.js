@@ -12,6 +12,23 @@ function getRazorpayCredentials() {
   return env.razorpay;
 }
 
+function normalizeRazorpayContact(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  const contact = digits.length > 10 ? digits.slice(-10) : digits;
+
+  return /^\d{10}$/.test(contact) ? contact : "";
+}
+
+function normalizeRazorpayPrefill(user = {}) {
+  return {
+    name: String(user.fullName || user.full_name || user.name || "").trim(),
+    email: String(user.email || "").trim(),
+    contact: normalizeRazorpayContact(
+      user.mobileNumber || user.mobile_number || user.mobile || user.phone
+    )
+  };
+}
+
 async function createRazorpayCustomer({ name, email, contact }) {
   const credentials = getRazorpayCredentials();
   const auth = Buffer.from(
@@ -197,6 +214,8 @@ module.exports = {
   createRazorpayOrder,
   createRazorpaySubscription,
   getRazorpayCredentials,
+  normalizeRazorpayContact,
+  normalizeRazorpayPrefill,
   verifyRazorpayPaymentSignature,
   verifyRazorpaySubscriptionSignature,
   verifyRazorpayWebhookSignature

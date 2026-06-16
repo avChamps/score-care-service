@@ -14,6 +14,7 @@ const {
   createRazorpayCustomer,
   createRazorpayOrder,
   getRazorpayCredentials,
+  normalizeRazorpayPrefill,
   verifyRazorpayPaymentSignature,
   verifyRazorpayWebhookSignature
 } = require("../services/razorpay.service");
@@ -235,10 +236,11 @@ async function createGatewaySubscription(req, res, next) {
     }
 
     const user = await findUserById(req.auth.internalUserId);
+    const prefill = normalizeRazorpayPrefill(user);
     const customer = await createRazorpayCustomer({
-      name: user.fullName || user.mobileNumber,
-      email: user.email || undefined,
-      contact: user.mobileNumber
+      name: prefill.name || prefill.contact,
+      email: prefill.email || undefined,
+      contact: prefill.contact
     });
 
     const order = await createRazorpayOrder({
@@ -270,6 +272,7 @@ async function createGatewaySubscription(req, res, next) {
       data: {
         keyId: getRazorpayCredentials().keyId,
         customerId: customer.id,
+        prefill,
         recurring: "1",
         plan,
         order

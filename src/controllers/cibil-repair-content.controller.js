@@ -18,10 +18,11 @@ const {
   createCibilRepairRequestUpdatedNotification,
   listNotificationsByUserPublicId
 } = require("../models/notification.model");
-const { findUserByPublicId } = require("../models/user.model");
+const { findUserById, findUserByPublicId } = require("../models/user.model");
 const {
   createRazorpayOrder,
   getRazorpayCredentials,
+  normalizeRazorpayPrefill,
   verifyRazorpayPaymentSignature
 } = require("../services/razorpay.service");
 
@@ -437,6 +438,8 @@ async function createMyCibilRepairPaymentOrder(req, res, next) {
       });
     }
 
+    const user = await findUserById(req.auth.internalUserId);
+    const prefill = normalizeRazorpayPrefill(user);
     const order = await createRazorpayOrder({
       amount: value.amount,
       currency: value.currency,
@@ -452,6 +455,7 @@ async function createMyCibilRepairPaymentOrder(req, res, next) {
       status: "success",
       data: {
         keyId: getRazorpayCredentials().keyId,
+        prefill,
         order
       }
     });
