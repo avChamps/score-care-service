@@ -24,9 +24,9 @@ function normalizeData(data = {}, screen) {
   }, {});
 }
 
-function buildMessage(tokens, payload = {}) {
+function buildMessage(token, payload = {}) {
   const message = {
-    tokens,
+    token,
     notification: {
       title: payload.title || "",
       body: payload.body || ""
@@ -56,17 +56,18 @@ function buildMessage(tokens, payload = {}) {
   return message;
 }
 
-function collectInvalidTokens(batchTokens, responses) {
-  return responses
-    .map((response, index) => {
-      const code = response.error?.code;
-      return code && INVALID_TOKEN_ERROR_CODES.has(code) ? batchTokens[index] : null;
-    })
-    .filter(Boolean);
+function isInvalidTokenError(error) {
+  return INVALID_TOKEN_ERROR_CODES.has(error?.code);
 }
 
 async function sendToTokens(tokens, payload) {
-  const uniqueTokens = [...new Set(tokens.filter(Boolean))];
+  const uniqueTokens = [
+    ...new Set(
+      tokens
+        .map((token) => String(token || "").trim())
+        .filter(Boolean)
+    )
+  ];
 
   if (!uniqueTokens.length) {
     return {
@@ -81,15 +82,17 @@ async function sendToTokens(tokens, payload) {
   let failureCount = 0;
   const invalidTokens = [];
 
-  for (let index = 0; index < uniqueTokens.length; index += 500) {
-    const batchTokens = uniqueTokens.slice(index, index + 500);
-    const response = await messaging.sendEachForMulticast(
-      buildMessage(batchTokens, payload)
-    );
+  for (const token of uniqueTokens) {
+    try {
+      await messaging.send(buildMessage(token, payload));
+      successCount += 1;
+    } catch (error) {
+      failureCount += 1;
 
-    successCount += response.successCount;
-    failureCount += response.failureCount;
-    invalidTokens.push(...collectInvalidTokens(batchTokens, response.responses));
+      if (isInvalidTokenError(error)) {
+        invalidTokens.push(token);
+      }
+    }
   }
 
   const disabledCount = await disableFcmTokens(invalidTokens);

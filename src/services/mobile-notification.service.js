@@ -23,7 +23,7 @@ async function sendStoredNotificationToUser(userId, notification) {
   try {
     return await sendToUser(userId, buildPayload(notification));
   } catch (error) {
-    console.error(`Mobile notification failed: ${error.message}`);
+    console.error(error.stack || `Mobile notification failed: ${error.message}`);
     return null;
   }
 }
@@ -45,7 +45,7 @@ async function sendMonthlyCibilReportPush(userIds, monthKey) {
       }
     });
   } catch (error) {
-    console.error(`Monthly CIBIL mobile notification failed: ${error.message}`);
+    console.error(error.stack || `Monthly CIBIL mobile notification failed: ${error.message}`);
     return null;
   }
 }
