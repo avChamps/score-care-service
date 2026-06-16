@@ -22,11 +22,6 @@ const disputeAllowedMimeTypes = new Set([
 ]);
 
 const disputeAllowedExtensions = new Set([".pdf", ".jpg", ".jpeg", ".png"]);
-const creditRepairDocumentUploadDir = path.join(
-  process.cwd(),
-  "uploads",
-  "credit-repair-documents"
-);
 
 const uploadFields = [
   { name: "salarySlips", maxCount: 8 },
@@ -64,13 +59,13 @@ function buildDisputeFileName(file) {
   return `${safeFieldName}-${timestamp}-${randomSuffix}${ext}`;
 }
 
-function buildCreditRepairDocumentFileName(_req, file, callback) {
+function buildCreditRepairDocumentFileName(file) {
   const ext = path.extname(file.originalname || "").toLowerCase();
   const timestamp = Date.now();
   const randomSuffix = crypto.randomBytes(8).toString("hex");
   const safeBaseName = sanitizeFileBaseName(file.originalname);
 
-  callback(null, `${timestamp}-${randomSuffix}-${safeBaseName}${ext}`);
+  return `${timestamp}-${randomSuffix}-${safeBaseName}${ext}`;
 }
 
 function getPublicIdFromRequest(req) {
@@ -92,6 +87,15 @@ function getRelativePath(publicId, fileName) {
 
 function getDisputeRelativePath(publicId, fileName) {
   return path.posix.join(publicId, "dispute-assets", "files", fileName);
+}
+
+function getCreditRepairDocumentRelativePath(publicId, fileName) {
+  return path.posix.join(
+    sanitizePathSegment(publicId),
+    "repair-doc",
+    "documents",
+    fileName
+  );
 }
 
 function getPublicUrl(relativePath) {
@@ -299,6 +303,38 @@ async function saveDisputeUploadedFiles(publicId, filesByField = {}) {
   return saveDisputeFilesLocally(publicId, files);
 }
 
+async function saveCreditRepairDocumentFileLocally(publicId, file) {
+  const fileName = buildCreditRepairDocumentFileName(file);
+  const relativePath = getCreditRepairDocumentRelativePath(publicId, fileName);
+  const fullPath = getLocalPath(relativePath);
+
+  await fs.mkdir(path.dirname(fullPath), { recursive: true });
+  await fs.writeFile(fullPath, file.buffer);
+
+  return mapSavedFile(file, fileName, relativePath);
+}
+
+async function saveCreditRepairDocumentFileToSftp(publicId, file) {
+  return withSftp(async (sftp) => {
+    const fileName = buildCreditRepairDocumentFileName(file);
+    const relativePath = getCreditRepairDocumentRelativePath(publicId, fileName);
+    const remotePath = getSftpRemotePath(relativePath);
+
+    await sftp.mkdir(path.posix.dirname(remotePath), true);
+    await sftp.put(file.buffer, remotePath);
+
+    return mapSavedFile(file, fileName, relativePath);
+  });
+}
+
+async function saveCreditRepairDocumentFile(publicId, file) {
+  if (env.assets.storageDriver === "sftp") {
+    return saveCreditRepairDocumentFileToSftp(publicId, file);
+  }
+
+  return saveCreditRepairDocumentFileLocally(publicId, file);
+}
+
 async function deleteSavedFiles(documents = {}) {
   const files = flattenSavedDocuments(documents);
 
@@ -419,17 +455,8 @@ const disputeUpload = multer({
   }
 });
 
-const creditRepairDocumentUploadStorage = multer.diskStorage({
-  destination(_req, _file, callback) {
-    fs.mkdir(creditRepairDocumentUploadDir, { recursive: true })
-      .then(() => callback(null, creditRepairDocumentUploadDir))
-      .catch(callback);
-  },
-  filename: buildCreditRepairDocumentFileName
-});
-
 const creditRepairDocumentMulter = multer({
-  storage: creditRepairDocumentUploadStorage,
+  storage: multer.memoryStorage(),
   fileFilter(_req, file, callback) {
     const ext = path.extname(file.originalname || "").toLowerCase();
 
@@ -489,6 +516,7 @@ module.exports = {
   loanApplicationUpload,
   mapDisputeDocuments,
   readSavedFile,
+  saveCreditRepairDocumentFile,
   saveDisputeUploadedFiles,
   saveUploadedFiles,
   uploadFields

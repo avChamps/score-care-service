@@ -1,9 +1,18 @@
-const fs = require("fs/promises");
-
 const {
   createCreditRepairDocument,
   listCreditRepairDocumentsByUserId
 } = require("../models/credit-repair-document.model");
+const {
+  findLatestCibilRepairRequestByUserId,
+  updateCibilRepairRequest
+} = require("../models/cibil-repair-request.model");
+const {
+  createCreditRepairDocumentsUploadedNotification
+} = require("../models/notification.model");
+const {
+  deleteSavedFiles,
+  saveCreditRepairDocumentFile
+} = require("../utils/upload-assets");
 
 function normalizeString(value) {
   return String(value || "").trim();
@@ -13,10 +22,6 @@ function normalizeNullableString(value) {
   const normalized = normalizeString(value);
 
   return normalized || null;
-}
-
-function getUploadedFileUrl(req) {
-  return `${req.protocol}://${req.get("host")}/uploads/credit-repair-documents/${req.file.filename}`;
 }
 
 function validateCreditRepairDocumentPayload(req) {
@@ -55,33 +60,57 @@ function validateCreditRepairDocumentPayload(req) {
 }
 
 async function uploadCreditRepairDocument(req, res, next) {
+  let savedFile = null;
+
   try {
     const { errors, value } = validateCreditRepairDocumentPayload(req);
 
     if (errors.length > 0) {
-      if (req.file?.path) {
-        await fs.unlink(req.file.path).catch(() => null);
-      }
-
       return res.status(400).json({
         status: "error",
         errors
       });
     }
 
+    savedFile = await saveCreditRepairDocumentFile(req.auth.userId, req.file);
+
     const document = await createCreditRepairDocument(req.auth.internalUserId, {
       ...value,
-      documentUrl: getUploadedFileUrl(req)
+      documentUrl: savedFile.url
     });
+    const existingRequest = await findLatestCibilRepairRequestByUserId(
+      req.auth.internalUserId
+    );
+    const request = existingRequest?.repairStatus === "upload_document"
+      ? await updateCibilRepairRequest(existingRequest.id, {
+          paymentStatus: existingRequest.paymentStatus,
+          repairStatus: "submitted",
+          activeDisputes: existingRequest.activeDisputes,
+          resolvedDisputes: existingRequest.resolvedDisputes,
+          pointsGained: existingRequest.pointsGained,
+          progressItems: existingRequest.progressItems,
+          remarks: existingRequest.remarks
+        })
+      : existingRequest;
+    const notification = request
+      ? await createCreditRepairDocumentsUploadedNotification(
+          req.auth.internalUserId,
+          request
+        )
+      : null;
 
     return res.status(201).json({
       status: "success",
       message: "Document uploaded successfully",
-      data: document
+      data: {
+        document,
+        request,
+        notification
+      }
     });
   } catch (error) {
-    if (req.file?.path) {
-      await fs.unlink(req.file.path).catch(() => null);
+    if (savedFile) {
+      await deleteSavedFiles({ document: [savedFile] }).catch(() => null);
     }
 
     next(error);

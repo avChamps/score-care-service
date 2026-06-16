@@ -142,14 +142,27 @@ async function createFreeTierCreatedNotification(userId) {
 async function createCibilRepairRequestCreatedNotification(userId, request) {
   return createNotification(userId, {
     type: "cibil_repair_request_created",
-    title: "CIBIL dispute raised",
-    message: "Your CIBIL dispute request has been submitted.",
+    title: "CIBIL repair request accepted",
+    message: "Your request has been accepted. Please upload your documents.",
     notificationKey: `cibil_repair_request_created:${request.id}`,
     data: {
       repairRequestId: request.id,
       repairStatus: request.repairStatus,
       activeDisputes: request.activeDisputes,
       resolvedDisputes: request.resolvedDisputes
+    }
+  });
+}
+
+async function createCreditRepairDocumentsUploadedNotification(userId, request) {
+  return createNotification(userId, {
+    type: "credit_repair_documents_uploaded",
+    title: "Documents uploaded",
+    message: "Your documents have been uploaded successfully. We will review them soon.",
+    notificationKey: `credit_repair_documents_uploaded:${request.id}:${Date.now()}`,
+    data: {
+      repairRequestId: request.id,
+      repairStatus: request.repairStatus
     }
   });
 }
@@ -344,6 +357,7 @@ module.exports = {
   createCibilRepairRequestCreatedNotification,
   createCibilRepairRequestUpdatedNotification,
   createCreditDisputeSubmittedNotification,
+  createCreditRepairDocumentsUploadedNotification,
   createFeedbackSubmittedNotification,
   createFreeTierCreatedNotification,
   createLoanAppliedNotification,

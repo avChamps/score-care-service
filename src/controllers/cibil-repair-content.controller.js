@@ -249,7 +249,7 @@ function validateCibilRepairRequestPayload(body) {
       razorpayPaymentId,
       razorpaySignature,
       repairStatus,
-      remarks: normalizeNullableString(body.remarks)
+      remarks: "Please upload your docs"
     }
   };
 }
