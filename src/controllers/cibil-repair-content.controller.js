@@ -28,6 +28,7 @@ const {
 
 const paymentStatuses = new Set(["pending", "paid", "failed", "refunded"]);
 const repairStatuses = new Set([
+  "upload_document",
   "submitted",
   "analysis",
   "in_progress",
@@ -193,7 +194,7 @@ function validateCibilRepairRequestPayload(body) {
   const amount = Number(body.amount);
   const currency = normalizeString(body.currency || "INR").toUpperCase();
   const paymentStatus = normalizeString(body.paymentStatus || "pending");
-  const repairStatus = normalizeString(body.repairStatus || "submitted");
+  const repairStatus = "upload_document";
   const razorpayOrderId = normalizeString(body.razorpayOrderId);
   const razorpayPaymentId = normalizeString(body.razorpayPaymentId);
   const razorpaySignature = normalizeString(body.razorpaySignature);

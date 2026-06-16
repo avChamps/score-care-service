@@ -22,6 +22,11 @@ const disputeAllowedMimeTypes = new Set([
 ]);
 
 const disputeAllowedExtensions = new Set([".pdf", ".jpg", ".jpeg", ".png"]);
+const creditRepairDocumentUploadDir = path.join(
+  process.cwd(),
+  "uploads",
+  "credit-repair-documents"
+);
 
 const uploadFields = [
   { name: "salarySlips", maxCount: 8 },
@@ -57,6 +62,15 @@ function buildDisputeFileName(file) {
   const safeFieldName = sanitizeFileBaseName(file.fieldname);
 
   return `${safeFieldName}-${timestamp}-${randomSuffix}${ext}`;
+}
+
+function buildCreditRepairDocumentFileName(_req, file, callback) {
+  const ext = path.extname(file.originalname || "").toLowerCase();
+  const timestamp = Date.now();
+  const randomSuffix = crypto.randomBytes(8).toString("hex");
+  const safeBaseName = sanitizeFileBaseName(file.originalname);
+
+  callback(null, `${timestamp}-${randomSuffix}-${safeBaseName}${ext}`);
 }
 
 function getPublicIdFromRequest(req) {
@@ -405,6 +419,52 @@ const disputeUpload = multer({
   }
 });
 
+const creditRepairDocumentUploadStorage = multer.diskStorage({
+  destination(_req, _file, callback) {
+    fs.mkdir(creditRepairDocumentUploadDir, { recursive: true })
+      .then(() => callback(null, creditRepairDocumentUploadDir))
+      .catch(callback);
+  },
+  filename: buildCreditRepairDocumentFileName
+});
+
+const creditRepairDocumentMulter = multer({
+  storage: creditRepairDocumentUploadStorage,
+  fileFilter(_req, file, callback) {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+
+    if (!disputeAllowedMimeTypes.has(file.mimetype) || !disputeAllowedExtensions.has(ext)) {
+      const error = new Error("Only PDF, JPG, JPEG, and PNG uploads are allowed");
+      error.statusCode = 400;
+      callback(error);
+      return;
+    }
+
+    callback(null, true);
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+    files: 1
+  }
+});
+
+function creditRepairDocumentUpload(req, res, next) {
+  creditRepairDocumentMulter.single("file")(req, res, (error) => {
+    if (error) {
+      if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+        return res.status(400).json({
+          status: "error",
+          message: "file must be 5MB or smaller"
+        });
+      }
+
+      return handleMulterError(error, req, res, next);
+    }
+
+    return next();
+  });
+}
+
 function disputeDocumentUpload(req, res, next) {
   disputeUpload.fields([
     { name: "closureCertificate", maxCount: 1 },
@@ -421,6 +481,7 @@ function disputeDocumentUpload(req, res, next) {
 }
 
 module.exports = {
+  creditRepairDocumentUpload,
   deleteSavedFiles,
   deleteDisputeUploadedFiles,
   disputeDocumentUpload,
