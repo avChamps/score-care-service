@@ -90,12 +90,12 @@ async function findCibilReportByUserId(userId) {
   return findCreditReportByUserId(userId, "cibil_pdf");
 }
 
-async function findExperianScoreByUserId(userId) {
-  return findCreditReportByUserId(userId, "experian_score");
+async function findCrifScoreByUserId(userId) {
+  return findCreditReportByUserId(userId, "crif_score");
 }
 
-async function findExperianReportByUserId(userId) {
-  return findCreditReportByUserId(userId, "experian_report");
+async function findCrifReportByUserId(userId) {
+  return findCreditReportByUserId(userId, "crif_report");
 }
 
 async function findLatestSavedCreditReportByUserId(userId) {
@@ -126,7 +126,7 @@ async function findLatestSavedCreditReportByUserId(userId) {
     FROM credit_reports
     WHERE user_id = ?
       AND provider = 'surepass'
-      AND report_type IN ('experian_report', 'cibil_pdf')
+      AND report_type IN ('crif_report', 'cibil_pdf')
     ORDER BY fetched_at DESC, updated_at DESC, id DESC
     LIMIT 1`,
     [userId]
@@ -218,12 +218,12 @@ async function saveCibilReport(userId, surepassResponse) {
   return saveSurepassCreditReport(userId, "cibil_pdf", surepassResponse);
 }
 
-async function saveExperianScore(userId, surepassResponse) {
-  return saveSurepassCreditReport(userId, "experian_score", surepassResponse);
+async function saveCrifScore(userId, surepassResponse) {
+  return saveSurepassCreditReport(userId, "crif_score", surepassResponse);
 }
 
-async function saveExperianReport(userId, surepassResponse) {
-  return saveSurepassCreditReport(userId, "experian_report", surepassResponse);
+async function saveCrifReport(userId, surepassResponse) {
+  return saveSurepassCreditReport(userId, "crif_report", surepassResponse);
 }
 
 async function saveCibilReportPdfBase64(userId, creditReportBase64) {
@@ -278,13 +278,13 @@ async function listCreditReportDownloadsByUserId(userId) {
 
 module.exports = {
   findCibilReportByUserId,
-  findExperianReportByUserId,
-  findExperianScoreByUserId,
+  findCrifReportByUserId,
+  findCrifScoreByUserId,
   findLatestSavedCreditReportByUserId,
   listCreditReportDownloadsByUserId,
   saveCibilReport,
-  saveExperianReport,
-  saveExperianScore,
+  saveCrifReport,
+  saveCrifScore,
   saveCibilReportPdfBase64,
   saveCreditReportDownload
 };

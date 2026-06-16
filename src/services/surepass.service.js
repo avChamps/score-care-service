@@ -54,24 +54,24 @@ async function fetchCibilCreditReport(payload) {
   );
 }
 
-async function fetchExperianCreditScore(payload) {
+async function fetchCrifCreditScore(payload) {
   return postSurepass(
-    env.surepass.experianScorePath,
+    env.surepass.crifScorePath,
     payload,
-    "Failed to fetch Experian credit score from Surepass"
+    "Failed to fetch CRIF credit score from Surepass"
   );
 }
 
-async function fetchExperianCreditReport(payload) {
+async function fetchCrifCreditReport(payload) {
   return postSurepass(
-    env.surepass.experianReportPath,
+    env.surepass.crifReportPath,
     payload,
-    "Failed to fetch Experian credit report from Surepass"
+    "Failed to fetch CRIF credit report from Surepass"
   );
 }
 
 module.exports = {
   fetchCibilCreditReport,
-  fetchExperianCreditReport,
-  fetchExperianCreditScore
+  fetchCrifCreditReport,
+  fetchCrifCreditScore,
 };

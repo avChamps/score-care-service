@@ -7,18 +7,18 @@ const { promisify } = require("util");
 
 const {
   fetchCibilCreditReport,
-  fetchExperianCreditReport,
-  fetchExperianCreditScore
+  fetchCrifCreditReport,
+  fetchCrifCreditScore,
 } = require("../services/surepass.service");
 const {
   findCibilReportByUserId,
-  findExperianReportByUserId,
-  findExperianScoreByUserId,
+  findCrifReportByUserId,
+  findCrifScoreByUserId,
   findLatestSavedCreditReportByUserId,
   listCreditReportDownloadsByUserId,
   saveCibilReport,
-  saveExperianReport,
-  saveExperianScore,
+  saveCrifReport,
+  saveCrifScore,
   saveCibilReportPdfBase64,
   saveCreditReportDownload
 } = require("../models/credit-report.model");
@@ -113,6 +113,58 @@ function validateExperianPayload(body) {
       pan,
       name,
       consent
+    }
+  };
+}
+
+function buildCrifScorePayloadFromUser(user) {
+  const nameParts = String(user.fullName || "").trim().split(/\s+/).filter(Boolean);
+
+  return {
+    first_name: nameParts[0] || "",
+    last_name: nameParts.slice(1).join(" "),
+    mobile: user.mobileNumber,
+    consent: "Y",
+    pan: user.panNumber
+  };
+}
+
+function validateCrifScorePayload(body) {
+  const errors = [];
+  const firstName = String(body.first_name || "").trim();
+  const lastName = String(body.last_name || "").trim();
+  const mobile = String(body.mobile || "").trim();
+  const pan = String(body.pan || "").trim().toUpperCase();
+  const consent = normalizeConsent(body.consent);
+
+  if (firstName.length < 2) {
+    errors.push("First name is required");
+  }
+
+  if (lastName.length < 1) {
+    errors.push("Last name is required");
+  }
+
+  if (!mobilePattern.test(mobile)) {
+    errors.push("Valid 10 digit Indian mobile number is required");
+  }
+
+  if (!panPattern.test(pan)) {
+    errors.push("Valid PAN number is required");
+  }
+
+  if (consent !== "Y") {
+    errors.push("User consent is required");
+  }
+
+  return {
+    errors,
+    value: {
+      first_name: firstName,
+      last_name: lastName,
+      mobile,
+      consent,
+      pan
     }
   };
 }
@@ -234,6 +286,22 @@ function toArray(value) {
   }
 
   return Array.isArray(value) ? value : [value];
+}
+
+function normalizeArray(value) {
+  if (value === null || value === undefined || value === "") {
+    return [];
+  }
+
+  return Array.isArray(value) ? value : [value];
+}
+
+function safeValue(value, fallback = "-") {
+  if (value === null || value === undefined || value === "") {
+    return fallback;
+  }
+
+  return value;
 }
 
 function getLines(text) {
@@ -798,7 +866,7 @@ function valueOrDash(value) {
 function formatCreditReportDate(value) {
   const text = String(value || "").trim();
 
-  if (!text) {
+  if (!text || text === "-") {
     return "-";
   }
 
@@ -828,6 +896,22 @@ function formatInr(value) {
   }
 
   return `Rs. ${Number(text).toLocaleString("en-IN")}`;
+}
+
+function formatAmount(value) {
+  const text = String(value || "").trim();
+
+  if (!text || text === "-") {
+    return "-";
+  }
+
+  const normalized = text.replace(/,/g, "");
+
+  if (Number.isNaN(Number(normalized))) {
+    return text.startsWith("₹") || /^rs\.?/i.test(text) ? text : `₹${text}`;
+  }
+
+  return `₹${Number(normalized).toLocaleString("en-IN")}`;
 }
 
 function mapGender(value) {
@@ -885,6 +969,57 @@ function getAccountStatus(account) {
   return "Active";
 }
 
+function parseCrifDate(value) {
+  const text = String(value || "").trim();
+
+  if (!text) {
+    return null;
+  }
+
+  const ddMmYyyy = text.match(/^(\d{2})-(\d{2})-(\d{4})$/);
+
+  if (ddMmYyyy) {
+    return new Date(`${ddMmYyyy[3]}-${ddMmYyyy[2]}-${ddMmYyyy[1]}T00:00:00+05:30`);
+  }
+
+  const yyyyMmDd = text.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  if (yyyyMmDd) {
+    return new Date(`${yyyyMmDd[1]}-${yyyyMmDd[2]}-${yyyyMmDd[3]}T00:00:00+05:30`);
+  }
+
+  const parsed = new Date(text);
+
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function isWithinLastMonths(value, months) {
+  const date = parseCrifDate(value);
+
+  if (!date) {
+    return false;
+  }
+
+  const cutoff = new Date();
+  cutoff.setMonth(cutoff.getMonth() - months);
+
+  return date >= cutoff;
+}
+
+function getCrifAccountStatus(account) {
+  const status = String(account?.["ACCOUNT-STATUS"] || "").trim();
+
+  if (/closed/i.test(status)) {
+    return "Closed";
+  }
+
+  if (/active/i.test(status)) {
+    return "Active";
+  }
+
+  return status || "-";
+}
+
 function uniqueBy(items, getKey) {
   const seen = new Set();
 
@@ -905,71 +1040,72 @@ function uniqueBy(items, getKey) {
 
 function buildRawReportPdfData(savedReport) {
   const report = getReportSource(savedReport);
-  const accounts = getCaisAccounts(report);
-  const firstHolder = toArray(accounts[0]?.CAIS_Holder_Details)[0] || {};
-  const ids = accounts.flatMap((account) =>
-    toArray(account.CAIS_Holder_ID_Details).map((id) => ({
-      ...id,
-      source: getAccountSource(account)
-    }))
-  );
-  const panId = ids.find((id) => /PAN|INCOME TAX/i.test(`${id.ID_Type || ""} ${id.Income_TAX_PAN || ""}`));
-  const addresses = uniqueBy(
-    accounts.flatMap((account) =>
-      toArray(account.CAIS_Holder_Address_Details).map((address) => ({
-        address: [
-          address.First_Line_Of_Address_non_normalized,
-          address.Second_Line_Of_Address_non_normalized,
-          address.Third_Line_Of_Address_non_normalized,
-          address.City_non_normalized
-        ].filter(Boolean).join(", "),
-        zip: address.ZIP_Postal_Code_non_normalized,
-        state: address.State_non_normalized,
-        category: address.Address_indicator_non_normalized,
-        source: getAccountSource(account),
-        dateReported: address.Date_of_Address_Reported
-      }))
-    ),
-    (address) => `${address.address}|${address.zip}|${address.state}`
-  ).filter((address) => address.address || address.zip || address.state).slice(0, 8);
-  const telephones = uniqueBy(
-    accounts.flatMap((account) => {
-      const source = getAccountSource(account);
-      const phones = toArray(account.CAIS_Holder_Phone_Details).map((phone) => ({
-        number: phone.Mobile_Telephone_Number || phone.Telephone_Number,
-        type: phone.Telephone_Type,
-        email: phone.EMailId,
-        source
-      }));
-      const idEmails = toArray(account.CAIS_Holder_ID_Details).map((id) => ({
-        number: "-",
-        type: "-",
-        email: id.EMailId,
-        source
-      }));
+  const responses = normalizeArray(report?.RESPONSES?.RESPONSE);
+  const accounts = responses
+    .map((response) => response?.["LOAN-DETAILS"])
+    .filter(Boolean);
+  const enquiries = normalizeArray(report?.["INQUIRY-HISTORY"]?.HISTORY);
+  const primarySummary = report?.["ACCOUNTS-SUMMARY"]?.["PRIMARY-ACCOUNTS-SUMMARY"] || {};
+  const variations = report?.["PERSONAL-INFO-VARIATION"] || {};
+  const firstVariationValue = (variation) => {
+    const firstVariation = getVariationItems(variation)[0];
 
-      return [...phones, ...idEmails];
-    }),
-    (item) => `${item.number || ""}|${item.email || ""}`
-  ).filter((item) => item.number || item.email);
-  const summary = report?.CAIS_Account?.CAIS_Summary || {};
-  const enquiry = report?.CAPS?.CAPS_Summary || {};
+    if (!firstVariation || typeof firstVariation !== "object") {
+      return firstVariation;
+    }
+
+    return firstVariation.VALUE || firstVariation["VARIATION-VALUE"];
+  };
+  const inquiryCountLast6Months = enquiries.filter((enquiry) =>
+    isWithinLastMonths(enquiry?.["INQUIRY-DATE"], 6)
+  ).length;
+  const newAccountsLast6Months = accounts.filter((account) =>
+    isWithinLastMonths(account?.["DISBURSED-DATE"], 6)
+  ).length;
+  const newDelinquentAccountsLast6Months = accounts.filter((account) =>
+    isWithinLastMonths(account?.["DATE-REPORTED"], 6) &&
+    Number(String(account?.["OVERDUE-AMT"] || "0").replace(/,/g, "")) > 0
+  ).length;
 
   return {
-    score: firstValue(savedReport.creditScore, report?.SCORE?.BureauScore),
-    personal: [
-      { label: "Name", value: firstValue(savedReport.name, report?.name) },
-      { label: "Mobile", value: firstValue(savedReport.mobile, report?.mobile) },
-      { label: "PAN", value: firstValue(panId?.Income_TAX_PAN, panId?.ID_Number, savedReport.pan, report?.pan) },
-      { label: "Date of Birth", value: formatCreditReportDate(firstHolder.Date_of_birth) },
-      { label: "Gender", value: mapGender(firstHolder.Gender_Code || savedReport.gender) },
-      { label: "Identification Type", value: "Income Tax ID Number (PAN)" }
-    ],
-    accountSummary: summary,
-    addresses,
-    telephones,
+    clientId: firstValue(savedReport.clientId, report?.["REPORT-ID"], report?.["CLIENT-ID"]),
+    score: firstValue(
+      savedReport.creditScore,
+      report?.SCORES?.SCORE?.["SCORE-VALUE"],
+      report?.SCORE?.BureauScore
+    ),
+    profile: {
+      name: firstValue(savedReport.name, report?.["NAME"], firstVariationValue(variations?.["NAME-VARIATIONS"])),
+      mobile: firstValue(savedReport.mobile, report?.["MOBILE"], firstVariationValue(variations?.["PHONE-NUMBER-VARIATIONS"])),
+      pan: firstValue(savedReport.pan, report?.["PAN"], firstVariationValue(variations?.["PAN-VARIATIONS"])),
+      dob: firstValue(report?.["DOB"], report?.["DATE-OF-BIRTH"], firstVariationValue(variations?.["DATE-OF-BIRTH-VARIATIONS"])),
+      email: firstValue(savedReport.userEmail, report?.["EMAIL"], firstVariationValue(variations?.["EMAIL-VARIATIONS"])),
+      address: firstValue(report?.["ADDRESS"], firstVariationValue(variations?.["ADDRESS-VARIATIONS"]))
+    },
+    summary: {
+      totalAccounts: firstValue(primarySummary?.["TOTAL-ACCOUNTS"], primarySummary?.["NUMBER-OF-ACCOUNTS"], accounts.length),
+      activeAccounts: firstValue(
+        primarySummary?.["ACTIVE-ACCOUNTS"],
+        accounts.filter((account) => getCrifAccountStatus(account) === "Active").length
+      ),
+      overdueAccounts: firstValue(
+        primarySummary?.["OVERDUE-ACCOUNTS"],
+        accounts.filter((account) => Number(String(account?.["OVERDUE-AMT"] || "0").replace(/,/g, "")) > 0).length
+      ),
+      currentBalance: firstValue(
+        primarySummary?.["CURRENT-BALANCE"],
+        primarySummary?.["TOTAL-CURRENT-BALANCE"],
+        primarySummary?.["TOTAL-OUTSTANDING-BALANCE"],
+        primarySummary?.["SECURED-OUTSTANDING-BALANCE"]
+      ),
+      disbursedAmount: firstValue(primarySummary?.["DISBURSED-AMOUNT"], primarySummary?.["HIGH-CREDIT"], primarySummary?.["HIGH-CREDIT-AMOUNT"]),
+      inquiryCountLast6Months,
+      newAccountsLast6Months,
+      newDelinquentAccountsLast6Months
+    },
+    variations,
     accounts,
-    enquiry
+    enquiries
   };
 }
 
@@ -1266,47 +1402,177 @@ function renderTokens(template, tokens) {
   );
 }
 
-function renderAddressCards(addresses) {
-  if (addresses.length === 0) {
-    return '<div class="address-row"><span>-</span><span>-</span><span>-</span><span>-</span><span>-</span><span>-</span><span>-</span></div>';
+function getVariationItems(variation) {
+  if (!variation || typeof variation !== "object") {
+    return normalizeArray(variation);
   }
 
+  return normalizeArray(
+    variation.VARIATION ||
+    variation.VARIATIONS ||
+    variation.VALUE ||
+    variation
+  );
+}
+
+function renderVariationRows(variation) {
+  const rows = getVariationItems(variation).filter((item) =>
+    item !== null && item !== undefined && item !== ""
+  );
+
+  if (rows.length === 0) {
+    return '<tr><td colspan="3">No records found</td></tr>';
+  }
+
+  return rows.map((item) => {
+    if (typeof item !== "object") {
+      return `<tr><td>${escapeHtml(item)}</td><td>-</td><td>-</td></tr>`;
+    }
+
+    return `
+      <tr>
+        <td>${escapeHtml(firstValue(
+          item.VALUE,
+          item["VARIATION-VALUE"],
+          item.NAME,
+          item.ADDRESS,
+          item.EMAIL,
+          item.PHONE,
+          item["PHONE-NUMBER"],
+          item.PAN,
+          item.ID,
+          item["ID-NUMBER"]
+        ))}</td>
+        <td>${escapeHtml(firstValue(item["REPORTED-DATE"], item["DATE-REPORTED"], item.DATE, item["REPORTING-DATE"]))}</td>
+        <td>${escapeHtml(firstValue(item.SOURCE, item["REPORTED-BY"], item["CREDIT-GRANTOR"], item["MEMBER-NAME"]))}</td>
+      </tr>
+    `;
+  }).join("");
+}
+
+function renderVariationSection(title, variation) {
   return `
-    <div class="address-row header-row">
-      <span>No</span>
-      <span>Address</span>
-      <span>ZIP</span>
-      <span>State</span>
-      <span>Category</span>
-      <span>Origin</span>
-      <span>Reported</span>
+    <div class="variation-block">
+      <h4>${escapeHtml(title)}</h4>
+      <table class="crif-table">
+        <thead>
+          <tr>
+            <th>Value</th>
+            <th>Reported</th>
+            <th>Source</th>
+          </tr>
+        </thead>
+        <tbody>${renderVariationRows(variation)}</tbody>
+      </table>
     </div>
-    ${addresses.map((address, index) => `
-      <div class="address-row">
-        <span>${index + 1}</span>
-        <span>${escapeHtml(address.address)}</span>
-        <span>${escapeHtml(address.zip)}</span>
-        <span>${escapeHtml(address.state)}</span>
-        <span>${escapeHtml(address.category)}</span>
-        <span>${escapeHtml(address.source)}</span>
-        <span>${escapeHtml(formatCreditReportDate(address.dateReported))}</span>
-      </div>
-    `).join("")}
   `;
 }
 
-function renderTelephoneRows(telephones) {
-  if (telephones.length === 0) {
-    return '<div class="compact-row"><span>-</span><span>-</span><span>-</span></div>';
+function renderAllVariationSections(variations) {
+  return [
+    ["Name Variations", variations?.["NAME-VARIATIONS"]],
+    ["DOB Variations", variations?.["DATE-OF-BIRTH-VARIATIONS"] || variations?.["DOB-VARIATIONS"]],
+    ["Address Variations", variations?.["ADDRESS-VARIATIONS"]],
+    ["Email Variations", variations?.["EMAIL-VARIATIONS"]],
+    ["Phone Number Variations", variations?.["PHONE-NUMBER-VARIATIONS"]],
+    ["PAN Variations", variations?.["PAN-VARIATIONS"]],
+    ["Other ID Variations", variations?.["ID-VARIATIONS"] || variations?.["OTHER-ID-VARIATIONS"]]
+  ].map(([title, variation]) => renderVariationSection(title, variation)).join("");
+}
+
+function parseCrifPaymentHistory(historyString) {
+  const months = {
+    jan: 0,
+    january: 0,
+    feb: 1,
+    february: 1,
+    mar: 2,
+    march: 2,
+    apr: 3,
+    april: 3,
+    may: 4,
+    jun: 5,
+    june: 5,
+    jul: 6,
+    july: 6,
+    aug: 7,
+    august: 7,
+    sep: 8,
+    september: 8,
+    oct: 9,
+    october: 9,
+    nov: 10,
+    november: 10,
+    dec: 11,
+    december: 11
+  };
+  const parsed = {};
+
+  String(historyString || "")
+    .split("|")
+    .map((item) => item.trim())
+    .filter(Boolean)
+    .forEach((item) => {
+      const match = item.match(/^([A-Za-z]+):(\d{4}),(.+)$/);
+
+      if (!match) {
+        return;
+      }
+
+      const monthIndex = months[match[1].toLowerCase()];
+
+      if (monthIndex === undefined) {
+        return;
+      }
+
+      parsed[match[2]] = parsed[match[2]] || Array(12).fill("-");
+      parsed[match[2]][monthIndex] = match[3].trim();
+    });
+
+  return Object.entries(parsed)
+    .sort(([yearA], [yearB]) => Number(yearB) - Number(yearA))
+    .map(([year, values]) => ({ year, values }));
+}
+
+function renderPaymentHistoryTable(historyString) {
+  const rows = parseCrifPaymentHistory(historyString);
+  const monthHeaders = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December"
+  ];
+
+  if (rows.length === 0) {
+    return '<div class="note compact-note">No payment history found</div>';
   }
 
-  return telephones.map((telephone) => `
-    <div class="compact-row">
-      <span>${escapeHtml(telephone.type)}</span>
-      <span>${escapeHtml(telephone.number || telephone.email)}</span>
-      <span>${escapeHtml(telephone.source)}</span>
-    </div>
-  `).join("");
+  return `
+    <table class="payment-history-table">
+      <thead>
+        <tr>
+          <th>Year</th>
+          ${monthHeaders.map((month) => `<th>${month}</th>`).join("")}
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map((row) => `
+          <tr>
+            <td>${escapeHtml(row.year)}</td>
+            ${row.values.map((value) => `<td>${escapeHtml(value)}</td>`).join("")}
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
+  `;
 }
 
 function renderAccountCards(accounts) {
@@ -1315,74 +1581,73 @@ function renderAccountCards(accounts) {
   }
 
   return accounts.map((account, index) => {
-    const status = getAccountStatus(account);
-    const historyRows = getPaymentHistoryRows(account);
-    const historyHtml = historyRows.length
-      ? historyRows.map((history) => {
-        const isPaid = history.dpd === 0;
-
-        return `
-          <div class="payment-history-item">
-            <span class="payment-history-month">${escapeHtml(history.label)}</span>
-            <span class="payment-history-dpd">${escapeHtml(isPaid ? "0 DPD" : `${history.dpd} DPD`)}</span>
-            <span class="payment-status ${isPaid ? "paid" : "overdue"}">${isPaid ? "Paid / On time" : "Overdue"}</span>
-          </div>
-        `;
-      }).join("")
-      : '<div class="payment-history-item"><span>-</span></div>';
+    const status = getCrifAccountStatus(account);
 
     return `
       <div class="account-card">
         <div class="account-head">
           <div>
-            <strong>${index + 1}. ${escapeHtml(account.Subscriber_Name)}</strong>
-            <p>${escapeHtml(getAccountTypeLabel(account))} &bull; ${escapeHtml(account.Account_Number)}</p>
+            <strong>${index + 1}. ${escapeHtml(account["CREDIT-GRANTOR"])}</strong>
+            <p>${escapeHtml(firstValue(account["ACCT-TYPE"], account["ACCOUNT-TYPE"]))} &bull; ${escapeHtml(account["ACCT-NUMBER"])}</p>
           </div>
-          <span class="status ${status.toLowerCase()}">${escapeHtml(status)}</span>
+          <span class="status ${status.toLowerCase() === "closed" ? "closed" : "active"}">${escapeHtml(status)}</span>
         </div>
 
         <div class="account-grid">
-          <div><span>Opened</span><strong>${escapeHtml(formatCreditReportDate(account.Open_Date))}</strong></div>
-          <div><span>Closed</span><strong>${escapeHtml(formatCreditReportDate(account.Date_Closed))}</strong></div>
-          <div><span>Reported</span><strong>${escapeHtml(formatCreditReportDate(account.Date_Reported))}</strong></div>
-          <div><span>Last Payment</span><strong>${escapeHtml(formatCreditReportDate(account.Date_of_Last_Payment))}</strong></div>
-          <div><span>Current Balance</span><strong>${escapeHtml(formatInr(account.Current_Balance))}</strong></div>
-          <div><span>Credit Limit</span><strong>${escapeHtml(formatInr(account.Credit_Limit_Amount))}</strong></div>
-          <div><span>High Credit / Loan</span><strong>${escapeHtml(formatInr(account.Highest_Credit_or_Original_Loan_Amount))}</strong></div>
-          <div><span>Past Due</span><strong>${escapeHtml(formatInr(account.Amount_Past_Due))}</strong></div>
-          <div><span>Latest DPD</span><strong>${escapeHtml(valueOrDash(historyRows[0]?.dpd))}</strong></div>
+          <div><span>Account Number</span><strong>${escapeHtml(account["ACCT-NUMBER"])}</strong></div>
+          <div><span>Account Type</span><strong>${escapeHtml(firstValue(account["ACCT-TYPE"], account["ACCOUNT-TYPE"]))}</strong></div>
+          <div><span>Credit Grantor</span><strong>${escapeHtml(account["CREDIT-GRANTOR"])}</strong></div>
+          <div><span>Info As Of</span><strong>${escapeHtml(account["DATE-REPORTED"])}</strong></div>
+          <div><span>Ownership</span><strong>${escapeHtml(account["OWNERSHIP-IND"])}</strong></div>
+          <div><span>Credit Limit</span><strong>${escapeHtml(formatAmount(account["CREDIT-LIMIT"]))}</strong></div>
+          <div><span>Cash Limit</span><strong>${escapeHtml(formatAmount(account["CASH-LIMIT"]))}</strong></div>
+          <div><span>Installment / Frequency</span><strong>${escapeHtml(`${safeValue(formatAmount(account["INSTALLMENT-AMT"]))} / ${safeValue(account["INSTALLMENT-FREQUENCY"])}`)}</strong></div>
+          <div><span>Disbursed Date</span><strong>${escapeHtml(account["DISBURSED-DATE"])}</strong></div>
+          <div><span>Last Payment Date</span><strong>${escapeHtml(account["LAST-PAYMENT-DATE"])}</strong></div>
+          <div><span>Closed Date</span><strong>${escapeHtml(account["CLOSED-DATE"])}</strong></div>
+          <div><span>Tenure</span><strong>${escapeHtml(account.TENURE)}</strong></div>
+          <div><span>Disbursed / High Credit</span><strong>${escapeHtml(formatAmount(firstValue(account["DISBURSED-AMT"], account["HIGH-CREDIT"])))}</strong></div>
+          <div><span>Current Balance</span><strong>${escapeHtml(formatAmount(account["CURRENT-BAL"]))}</strong></div>
+          <div><span>Last Paid Amount</span><strong>${escapeHtml(formatAmount(firstValue(account["LAST-PAID-AMOUNT"], account["LAST-PAID-AMT"])))}</strong></div>
+          <div><span>Overdue Amount</span><strong>${escapeHtml(formatAmount(account["OVERDUE-AMT"]))}</strong></div>
+          <div><span>Account Status</span><strong>${escapeHtml(account["ACCOUNT-STATUS"])}</strong></div>
         </div>
 
         <div class="payment-history-section">
           <div class="payment-history-title">Payment History</div>
-          <div class="payment-history-list">
-            ${historyHtml}
-          </div>
+          ${renderPaymentHistoryTable(account["COMBINED-PAYMENT-HISTORY"])}
         </div>
       </div>
     `;
   }).join("");
 }
 
-function renderEnquirySection(enquiry) {
-  const enquiryCounts = [
-    enquiry.CAPSLast7Days,
-    enquiry.CAPSLast30Days,
-    enquiry.CAPSLast90Days,
-    enquiry.CAPSLast180Days
-  ].map((value) => Number(value || 0));
-
-  if (enquiryCounts.every((count) => count === 0)) {
-    return '<div class="enquiry-card note">No recent enquiries found</div>';
+function renderEnquirySection(enquiries) {
+  if (enquiries.length === 0) {
+    return '<div class="enquiry-card note">No enquiries found</div>';
   }
 
   return `
-    <div class="info-grid enquiry-card">
-      <div><span class="label">Last 7 Days</span>${escapeHtml(enquiry.CAPSLast7Days)}</div>
-      <div><span class="label">Last 30 Days</span>${escapeHtml(enquiry.CAPSLast30Days)}</div>
-      <div><span class="label">Last 90 Days</span>${escapeHtml(enquiry.CAPSLast90Days)}</div>
-      <div><span class="label">Last 180 Days</span>${escapeHtml(enquiry.CAPSLast180Days)}</div>
-    </div>
+    <table class="crif-table enquiry-card">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Institution</th>
+          <th>Purpose</th>
+          <th>Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${enquiries.map((enquiry) => `
+          <tr>
+            <td>${escapeHtml(enquiry["INQUIRY-DATE"])}</td>
+            <td>${escapeHtml(enquiry["MEMBER-NAME"] || enquiry["CREDIT-GRANTOR"])}</td>
+            <td>${escapeHtml(enquiry["INQUIRY-PURPOSE"])}</td>
+            <td>${escapeHtml(formatAmount(enquiry["INQUIRY-AMOUNT"]))}</td>
+          </tr>
+        `).join("")}
+      </tbody>
+    </table>
   `;
 }
 
@@ -1394,31 +1659,30 @@ async function buildCibilReportHtml(savedReport) {
     fs.readFile(logoPath)
   ]);
   const data = buildRawReportPdfData(savedReport);
-  const creditAccount = data.accountSummary.Credit_Account || {};
-  const outstandingBalance = data.accountSummary.Total_Outstanding_Balance || {};
 
   return renderTokens(template, {
     logo_src: `data:image/png;base64,${logoBuffer.toString("base64")}`,
     report_generated_at: escapeHtml(formatReportDate(new Date())),
+    report_id: escapeHtml(data.clientId),
     credit_score: escapeHtml(data.score),
-    name: escapeHtml(data.personal[0]?.value),
-    date_of_birth: escapeHtml(data.personal[3]?.value),
-    gender: escapeHtml(data.personal[4]?.value),
-    identification_type: escapeHtml("Income Tax ID Number (PAN)"),
-    pan: escapeHtml(data.personal[2]?.value),
-    issue_date: "-",
-    credit_account_total: escapeHtml(creditAccount.CreditAccountTotal),
-    credit_account_active: escapeHtml(creditAccount.CreditAccountActive),
-    credit_account_closed: escapeHtml(creditAccount.CreditAccountClosed),
-    credit_account_default: escapeHtml(creditAccount.CreditAccountDefault),
-    outstanding_balance_all: escapeHtml(formatInr(outstandingBalance.Outstanding_Balance_All)),
-    outstanding_balance_secured: escapeHtml(formatInr(outstandingBalance.Outstanding_Balance_Secured)),
-    outstanding_balance_unsecured: escapeHtml(formatInr(outstandingBalance.Outstanding_Balance_UnSecured)),
-    address_rows: renderAddressCards(data.addresses),
-    telephone_rows: renderTelephoneRows(data.telephones),
+    name: escapeHtml(data.profile.name),
+    mobile: escapeHtml(data.profile.mobile),
+    pan: escapeHtml(data.profile.pan),
+    date_of_birth: escapeHtml(data.profile.dob),
+    email: escapeHtml(data.profile.email),
+    address: escapeHtml(data.profile.address),
+    credit_account_total: escapeHtml(data.summary.totalAccounts),
+    credit_account_active: escapeHtml(data.summary.activeAccounts),
+    credit_account_overdue: escapeHtml(data.summary.overdueAccounts),
+    current_balance: escapeHtml(formatAmount(data.summary.currentBalance)),
+    disbursed_amount: escapeHtml(formatAmount(data.summary.disbursedAmount)),
+    enquiries_last_6_months: escapeHtml(data.summary.inquiryCountLast6Months),
+    new_accounts_last_6_months: escapeHtml(data.summary.newAccountsLast6Months),
+    new_delinquent_accounts_last_6_months: escapeHtml(data.summary.newDelinquentAccountsLast6Months),
+    variation_sections: renderAllVariationSections(data.variations),
     account_total: escapeHtml(data.accounts.length),
     account_rows: renderAccountCards(data.accounts),
-    enquiry_rows: renderEnquirySection(data.enquiry)
+    enquiry_rows: renderEnquirySection(data.enquiries)
   });
 }
 
@@ -1559,15 +1823,15 @@ async function getCibilCreditReport(req, res, next) {
   }
 }
 
-async function getExperianCreditScore(req, res, next) {
+async function getCrifCreditScore(req, res, next) {
   try {
     const internalUserId = getAuthInternalUserId(req);
-    const savedReport = await findExperianScoreByUserId(internalUserId);
+    const savedReport = await findCrifScoreByUserId(internalUserId);
 
     if (savedReport) {
       return res.status(200).json({
         status: "success",
-        message: "Experian credit score fetched from database",
+        message: "CRIF credit score fetched from database",
         source: "database",
         userId: savedReport.userId,
         data: formatSavedExperianReport(savedReport),
@@ -1581,7 +1845,18 @@ async function getExperianCreditScore(req, res, next) {
       });
     }
 
-    const { errors, value } = validateExperianPayload(req.body);
+    const user = await findUserById(internalUserId);
+
+    if (!user) {
+      return res.status(404).json({
+        status: "error",
+        message: "User not found"
+      });
+    }
+
+    const { errors, value } = validateCrifScorePayload(
+      buildCrifScorePayloadFromUser(user)
+    );
 
     if (errors.length > 0) {
       return res.status(400).json({
@@ -1590,30 +1865,30 @@ async function getExperianCreditScore(req, res, next) {
       });
     }
 
-    const report = await fetchExperianCreditScore(value);
+    const report = await fetchCrifCreditScore(value);
 
-    const savedExperianScore = await saveExperianScore(internalUserId, report);
+    const savedCrifScore = await saveCrifScore(internalUserId, report);
 
     return res.status(200).json({
       status: "success",
-      message: "Experian credit score fetched successfully",
+      message: "CRIF credit score fetched successfully",
       source: "surepass",
-      userId: savedExperianScore.userId,
-      data: formatSavedExperianReport(savedExperianScore),
+      userId: savedCrifScore.userId,
+      data: formatSavedExperianReport(savedCrifScore),
       provider: {
         name: "surepass",
         message: report.message,
         messageCode: report.message_code,
         statusCode: report.status_code
       },
-      fetchedAt: savedExperianScore.fetchedAt
+      fetchedAt: savedCrifScore.fetchedAt
     });
   } catch (error) {
     next(error);
   }
 }
 
-async function getExperianCreditReport(req, res, next) {
+async function getCrifCreditReport(req, res, next) {
   try {
     const internalUserId = getAuthInternalUserId(req);
     const user = await findUserById(internalUserId);
@@ -1635,12 +1910,12 @@ async function getExperianCreditReport(req, res, next) {
       });
     }
 
-    const savedReport = await findExperianReportByUserId(internalUserId);
+    const savedReport = await findCrifReportByUserId(internalUserId);
 
     if (savedReport) {
       return res.status(200).json({
         status: "success",
-        message: "Experian credit report fetched from database",
+        message: "CRIF credit report fetched from database",
         source: "database",
         userId: savedReport.userId,
         data: formatSavedExperianReport(savedReport),
@@ -1654,8 +1929,8 @@ async function getExperianCreditReport(req, res, next) {
       });
     }
 
-    const { errors, value } = validateExperianPayload(
-      buildExperianPayload(req, user)
+    const { errors, value } = validateCrifScorePayload(
+      buildCrifScorePayloadFromUser(user)
     );
 
     if (errors.length > 0) {
@@ -1665,22 +1940,22 @@ async function getExperianCreditReport(req, res, next) {
       });
     }
 
-    const report = await fetchExperianCreditReport(value);
-    const savedExperianReport = await saveExperianReport(internalUserId, report);
+    const report = await fetchCrifCreditReport(value);
+    const savedCrifReport = await saveCrifReport(internalUserId, report);
 
     return res.status(200).json({
       status: "success",
-      message: "Experian credit report fetched successfully",
+      message: "CRIF credit report fetched successfully",
       source: "surepass",
-      userId: savedExperianReport.userId,
-      data: formatSavedExperianReport(savedExperianReport),
+      userId: savedCrifReport.userId,
+      data: formatSavedExperianReport(savedCrifReport),
       provider: {
         name: "surepass",
         message: report.message,
         messageCode: report.message_code,
         statusCode: report.status_code
       },
-      fetchedAt: savedExperianReport.fetchedAt
+      fetchedAt: savedCrifReport.fetchedAt
     });
   } catch (error) {
     next(error);
@@ -1695,7 +1970,7 @@ async function getSavedCibilCreditReport(req, res, next) {
     if (!savedReport) {
       return res.status(404).json({
         status: "error",
-        message: "CIBIL report not found"
+        message: "CRIF report not found"
       });
     }
 
@@ -1744,7 +2019,7 @@ async function downloadCibilCreditReport(req, res, next) {
     if (!savedReport) {
       return res.status(404).json({
         status: "error",
-        message: "CIBIL report not found"
+        message: "CRIF report not found"
       });
     }
 
@@ -1775,8 +2050,8 @@ async function getCreditReportDownloads(req, res, next) {
 module.exports = {
   downloadCibilCreditReport,
   getCreditReportDownloads,
-  getExperianCreditReport,
-  getExperianCreditScore,
+  getCrifCreditReport,
+  getCrifCreditScore,
   getSavedCibilCreditReport,
   getCibilCreditReport
 };

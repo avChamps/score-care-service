@@ -17,7 +17,7 @@ const {
   sendWelcomeEmail
 } = require("../services/profile-email.service");
 const {
-  findExperianScoreByUserId
+  findCrifScoreByUserId
 } = require("../models/credit-report.model");
 const {
   createFreeTierCreatedNotification
@@ -268,16 +268,16 @@ async function getMyProfile(req, res, next) {
       });
     }
 
-    const experianScore = await findExperianScoreByUserId(internalUserId);
+    const crifScore = await findCrifScoreByUserId(internalUserId);
 
     return res.status(200).json({
       status: "success",
       data: {
         user: {
           ...user,
-          creditScore: experianScore?.creditScore || null,
-          creditScoreSource: experianScore ? "experian" : null,
-          creditScoreLastCheckedAt: formatDateTime(experianScore?.fetchedAt)
+          creditScore: crifScore?.creditScore || null,
+          creditScoreSource: crifScore ? "crif" : null,
+          creditScoreLastCheckedAt: formatDateTime(crifScore?.fetchedAt)
         }
       }
     });

@@ -67,12 +67,12 @@ msg91: {
     cibilReportPath:
       process.env.SUREPASS_CIBIL_REPORT_PATH ||
       "/api/v1/credit-report-cibil/fetch-report-pdf",
-    experianScorePath:
-      process.env.SUREPASS_EXPERIAN_SCORE_PATH ||
-      "/api/v1/credit-report-experian/score",
-    experianReportPath:
-      process.env.SUREPASS_EXPERIAN_REPORT_PATH ||
-      "/api/v1/credit-report-experian/fetch-report"
+    crifScorePath:
+      process.env.SUREPASS_CRIF_SCORE_PATH ||
+      "/api/v1/credit-report-crif/score",
+    crifReportPath:
+      process.env.SUREPASS_CRIF_REPORT_PATH ||
+      "/api/v1/credit-report-crif/fetch-report"
   },
   gemini: {
     apiKey: process.env.GEMINI_API_KEY || "",

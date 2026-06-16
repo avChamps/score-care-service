@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CIBIL Report Design</title>
+  <title>CRIF Credit Report</title>
 
   <style>
     * {
@@ -13,7 +13,7 @@
 
     @page {
       size: A4;
-      margin: 18mm 12mm;
+      margin: 12mm;
     }
 
     body {
@@ -66,7 +66,8 @@
     }
 
     .section-title {
-      margin-top: 25px;
+      margin-top: 18px;
+      margin-bottom: 10px;
       background: #08aeea;
       color: white;
       padding: 8px 14px;
@@ -77,15 +78,30 @@
       text-transform: uppercase;
     }
 
-    .section-title,
     .header,
     .score-box,
     .info-grid,
     .summary-grid,
-    .address-row,
-    .enquiry-card {
+    .address-row {
       break-inside: avoid;
       page-break-inside: avoid;
+    }
+
+    table {
+      page-break-inside: auto;
+    }
+
+    tr {
+      page-break-inside: avoid;
+      page-break-after: auto;
+    }
+
+    thead {
+      display: table-header-group;
+    }
+
+    tfoot {
+      display: table-footer-group;
     }
 
     .score-box {
@@ -253,6 +269,8 @@
       border-radius: 14px;
       padding: 14px;
       margin-top: 14px;
+      break-inside: auto;
+      page-break-inside: auto;
     }
 
     .account-head {
@@ -263,6 +281,8 @@
       border-bottom: 1px solid #e5eef3;
       padding-bottom: 10px;
       margin-bottom: 10px;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
 
     .account-head strong {
@@ -276,10 +296,14 @@
     }
 
     .status {
-      border-radius: 999px;
-      padding: 5px 10px;
+      border-radius: 4px;
+      padding: 8px 5px;
       font-size: 11px;
       font-weight: 700;
+      writing-mode: vertical-rl;
+      text-orientation: mixed;
+      min-height: 62px;
+      text-align: center;
     }
 
     .status.active {
@@ -288,8 +312,8 @@
     }
 
     .status.closed {
-      color: #555;
-      background: #eeeeee;
+      color: #9f1239;
+      background: #ffe4ee;
     }
 
     .account-grid {
@@ -333,52 +357,58 @@
       margin-bottom: 6px;
     }
 
-    .payment-history-list {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 6px;
+    .crif-table,
+    .payment-history-table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      margin-top: 8px;
+      font-size: 9px;
+      page-break-inside: auto;
     }
 
-    .payment-history-item {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
+    .payment-history-table {
+      font-size: 7px;
+    }
+
+    .crif-table th,
+    .crif-table td,
+    .payment-history-table th,
+    .payment-history-table td {
       border: 1px solid #d8eef5;
-      border-radius: 999px;
-      padding: 5px 7px;
-      font-size: 10px;
-      line-height: 1.2;
-      break-inside: avoid;
-      page-break-inside: avoid;
+      padding: 5px 4px;
+      line-height: 1.25;
+      word-break: break-word;
+      vertical-align: top;
     }
 
-    .payment-history-month {
+    .payment-history-table th:first-child,
+    .payment-history-table td:first-child {
+      width: 34px;
       font-weight: 700;
-      color: #222;
-      white-space: nowrap;
+      color: #0baee4;
     }
 
-    .payment-history-dpd {
-      color: #555;
-      white-space: nowrap;
+    .variation-block {
+      margin-top: 12px;
+      break-inside: auto;
+      page-break-inside: auto;
     }
 
-    .payment-status {
-      display: inline-block;
-      border-radius: 999px;
-      padding: 3px 8px;
-      font-size: 10px;
-      font-weight: 700;
+    .variation-block h4 {
+      margin: 0 0 6px;
+      color: #0baee4;
+      font-size: 11px;
+      text-transform: uppercase;
     }
 
-    .payment-status.paid {
-      color: #0b7a50;
-      background: #dff8ef;
+    .variation-block table {
+      page-break-inside: auto;
     }
 
-    .payment-status.overdue {
-      color: #b42318;
-      background: #fde8e7;
+    .compact-note {
+      margin-top: 6px;
+      font-size: 11px;
     }
 
   </style>
@@ -399,11 +429,12 @@
       </div>
 
       <div class="title">
-        CIBIL Score & Credit Report
+        CRIF Credit Report
+        <div class="date">Report ID: {{report_id}}</div>
       </div>
     </div>
 
-    <div class="section-title">CIBIL Score</div>
+    <div class="section-title">CRIF Score</div>
 
     <div class="score-box">
       <div class="gauge">
@@ -420,7 +451,7 @@
       </div>
     </div>
 
-    <div class="section-title">Personal Information</div>
+    <div class="section-title">Inquiry / Personal Information</div>
 
     <div class="info-grid">
       <div>
@@ -428,24 +459,24 @@
         <strong>{{name}}</strong>
       </div>
       <div>
+        <span class="label">Mobile</span>
+        <strong>{{mobile}}</strong>
+      </div>
+      <div>
+        <span class="label">PAN</span>
+        <strong>{{pan}}</strong>
+      </div>
+      <div>
         <span class="label">Date of Birth</span>
         <strong>{{date_of_birth}}</strong>
       </div>
       <div>
-        <span class="label">Gender</span>
-        {{gender}}
+        <span class="label">Email</span>
+        {{email}}
       </div>
       <div>
-        <span class="label">Identification Type</span>
-        {{identification_type}}
-      </div>
-      <div>
-        <span class="label">Number</span>
-        <strong>{{pan}}</strong>
-      </div>
-      <div>
-        <span class="label">Issue Date</span>
-        {{issue_date}}
+        <span class="label">Address</span>
+        {{address}}
       </div>
     </div>
 
@@ -461,32 +492,33 @@
         {{credit_account_active}}
       </div>
       <div>
-        <span class="label">Closed Accounts</span>
-        {{credit_account_closed}}
+        <span class="label">Overdue Accounts</span>
+        {{credit_account_overdue}}
       </div>
       <div>
-        <span class="label">Default Accounts</span>
-        {{credit_account_default}}
+        <span class="label">Current Balance</span>
+        {{current_balance}}
       </div>
       <div>
-        <span class="label">Outstanding Balance</span>
-        {{outstanding_balance_all}}
+        <span class="label">Disbursed / High Credit</span>
+        {{disbursed_amount}}
       </div>
       <div>
-        <span class="label">Secured / Unsecured</span>
-        {{outstanding_balance_secured}} / {{outstanding_balance_unsecured}}
+        <span class="label">Inquiries Last 6 Months</span>
+        {{enquiries_last_6_months}}
+      </div>
+      <div>
+        <span class="label">New Accounts Last 6 Months</span>
+        {{new_accounts_last_6_months}}
+      </div>
+      <div>
+        <span class="label">New Delinquent Last 6 Months</span>
+        {{new_delinquent_accounts_last_6_months}}
       </div>
     </div>
 
-    <div class="section-title">Contact Information</div>
-    <div class="contact-grid">
-      {{address_rows}}
-    </div>
-
-    <div class="section-title">Telephone / Email Information</div>
-    <div class="compact-rows">
-      {{telephone_rows}}
-    </div>
+    <div class="section-title">Personal Information Variations</div>
+    {{variation_sections}}
 
     <div class="account-section">
       <div class="section-title">Account Information (Total: {{account_total}})</div>
