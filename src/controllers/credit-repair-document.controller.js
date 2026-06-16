@@ -89,7 +89,7 @@ async function uploadCreditRepairDocument(req, res, next) {
           resolvedDisputes: existingRequest.resolvedDisputes,
           pointsGained: existingRequest.pointsGained,
           progressItems: existingRequest.progressItems,
-          remarks: existingRequest.remarks
+          remarks: "Under review."
         })
       : existingRequest;
     const notification = request
