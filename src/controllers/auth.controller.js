@@ -14,6 +14,9 @@ const {
 const {
   createFreeTierCreatedNotification
 } = require("../models/notification.model");
+const {
+  sendStoredNotificationToUser
+} = require("../services/mobile-notification.service");
 
 const mobilePattern = /^[6-9]\d{9}$/;
 const otpPattern = /^\d{4,9}$/;
@@ -87,6 +90,7 @@ async function verifyOtp(req, res, next) {
     const freeTierNotification = isNewUser
       ? await createFreeTierCreatedNotification(user.internalId)
       : null;
+    await sendStoredNotificationToUser(user.internalId, freeTierNotification);
     const token = createAuthToken({
       userId: user.publicId,
       mobileNumber,

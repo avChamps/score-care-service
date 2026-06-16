@@ -22,6 +22,9 @@ const {
 const {
   createFreeTierCreatedNotification
 } = require("../models/notification.model");
+const {
+  sendStoredNotificationToUser
+} = require("../services/mobile-notification.service");
 
 const mobilePattern = /^[6-9]\d{9}$/;
 const panPattern = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
@@ -119,6 +122,7 @@ async function recordUserLogin(req, res, next) {
     const freeTierNotification = isNewUser
       ? await createFreeTierCreatedNotification(user.internalId)
       : null;
+    await sendStoredNotificationToUser(user.internalId, freeTierNotification);
 
     return res.status(201).json({
       status: "success",

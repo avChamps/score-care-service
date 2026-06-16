@@ -12,6 +12,9 @@ const {
 const {
   createLoanStatusUpdatedNotification
 } = require("../models/notification.model");
+const {
+  sendStoredNotificationToUser
+} = require("../services/mobile-notification.service");
 const { readSavedFile } = require("../utils/upload-assets");
 
 const subscriptionStatuses = new Set([
@@ -139,6 +142,7 @@ async function updateAdminLoan(req, res, next) {
       loan.internalUserId,
       loan
     );
+    await sendStoredNotificationToUser(loan.internalUserId, notification);
 
     return res.status(200).json({
       status: "success",

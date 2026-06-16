@@ -4,6 +4,9 @@ const env = require("../config/env");
 const {
   createMonthlyCibilReportNotifications
 } = require("../models/notification.model");
+const {
+  sendMonthlyCibilReportPush
+} = require("./mobile-notification.service");
 
 function getCurrentMonthKey(date = new Date()) {
   const year = date.getFullYear();
@@ -15,6 +18,10 @@ function getCurrentMonthKey(date = new Date()) {
 async function runMonthlyCibilNotificationJob(date = new Date()) {
   const monthKey = getCurrentMonthKey(date);
   const result = await createMonthlyCibilReportNotifications(monthKey);
+
+  if (result.affectedRows) {
+    await sendMonthlyCibilReportPush(result.userIds, monthKey);
+  }
 
   console.log(
     `Monthly CIBIL notification job completed for ${monthKey}: ${result.affectedRows} rows affected`

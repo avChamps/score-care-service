@@ -10,6 +10,9 @@ const {
   createCreditRepairDocumentsUploadedNotification
 } = require("../models/notification.model");
 const {
+  sendStoredNotificationToUser
+} = require("../services/mobile-notification.service");
+const {
   deleteSavedFiles,
   saveCreditRepairDocumentFile
 } = require("../utils/upload-assets");
@@ -98,6 +101,7 @@ async function uploadCreditRepairDocument(req, res, next) {
           request
         )
       : null;
+    await sendStoredNotificationToUser(req.auth.internalUserId, notification);
 
     return res.status(201).json({
       status: "success",

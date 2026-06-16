@@ -11,6 +11,9 @@ const {
   createLoanAppliedNotification
 } = require("../models/notification.model");
 const {
+  sendStoredNotificationToUser
+} = require("../services/mobile-notification.service");
+const {
   deleteSavedFiles,
   getPublicIdFromRequest,
   saveUploadedFiles
@@ -275,6 +278,7 @@ async function applyLoan(req, res, next) {
         req.auth.internalUserId,
         loanApplication
       );
+      await sendStoredNotificationToUser(req.auth.internalUserId, notification);
     } catch (notificationError) {
       notification = {
         status: "failed",

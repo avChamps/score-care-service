@@ -25,6 +25,9 @@ const {
   normalizeRazorpayPrefill,
   verifyRazorpayPaymentSignature
 } = require("../services/razorpay.service");
+const {
+  sendStoredNotificationToUser
+} = require("../services/mobile-notification.service");
 
 const paymentStatuses = new Set(["pending", "paid", "failed", "refunded"]);
 const repairStatuses = new Set([
@@ -414,6 +417,7 @@ async function createMyCibilRepairRequest(req, res, next) {
       req.auth.internalUserId,
       request
     );
+    await sendStoredNotificationToUser(req.auth.internalUserId, notification);
     const [notifications, unreadCount] = await Promise.all([
       listNotificationsByUserPublicId(req.auth.userId),
       countUnreadNotificationsByUserPublicId(req.auth.userId)
@@ -607,6 +611,7 @@ async function updateAdminCibilRepairRequest(req, res, next) {
       user.internalId,
       request
     );
+    await sendStoredNotificationToUser(user.internalId, notification);
 
     return res.status(200).json({
       status: "success",

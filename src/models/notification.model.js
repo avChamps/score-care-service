@@ -361,6 +361,14 @@ async function createCibilRepairRequestUpdatedNotification(userId, request) {
 }
 
 async function createMonthlyCibilReportNotifications(monthKey) {
+  const [userRows] = await pool.query(
+    `SELECT DISTINCT cr.user_id AS userId
+    FROM credit_reports cr
+    INNER JOIN users u ON u.id = cr.user_id
+    WHERE cr.provider = 'surepass'
+      AND cr.report_type = 'cibil_pdf'
+      AND u.status = 'active'`
+  );
   const [result] = await pool.query(
     `INSERT INTO notifications (
       user_id,
@@ -395,7 +403,8 @@ async function createMonthlyCibilReportNotifications(monthKey) {
   );
 
   return {
-    affectedRows: result.affectedRows
+    affectedRows: result.affectedRows,
+    userIds: userRows.map((row) => row.userId)
   };
 }
 

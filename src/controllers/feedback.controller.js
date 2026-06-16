@@ -6,6 +6,9 @@ const {
 const {
   createFeedbackSubmittedNotification
 } = require("../models/notification.model");
+const {
+  sendStoredNotificationToUser
+} = require("../services/mobile-notification.service");
 
 function normalizeOptionalString(value) {
   return value === undefined || value === null ? null : String(value).trim() || null;
@@ -117,6 +120,7 @@ async function saveMyFeedback(req, res, next) {
       req.auth.internalUserId,
       feedback
     );
+    await sendStoredNotificationToUser(req.auth.internalUserId, notification);
 
     return res.status(200).json({
       status: "success",

@@ -7,6 +7,9 @@ const {
   createCreditDisputeSubmittedNotification
 } = require("../models/notification.model");
 const {
+  sendStoredNotificationToUser
+} = require("../services/mobile-notification.service");
+const {
   deleteSavedFiles,
   deleteDisputeUploadedFiles,
   mapDisputeDocuments,
@@ -127,6 +130,7 @@ async function submitDispute(req, res, next) {
       req.auth.internalUserId,
       dispute
     );
+    await sendStoredNotificationToUser(req.auth.internalUserId, notification);
 
     return res.status(201).json({
       status: "success",
