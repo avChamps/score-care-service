@@ -4,9 +4,7 @@ const {
   listDisputesByUserId
 } = require("../models/dispute.model");
 const {
-  countUnreadNotificationsByUserPublicId,
-  createCreditDisputeSubmittedNotification,
-  listNotificationsByUserPublicId
+  createCreditDisputeSubmittedNotification
 } = require("../models/notification.model");
 const {
   deleteSavedFiles,
@@ -129,10 +127,6 @@ async function submitDispute(req, res, next) {
       req.auth.internalUserId,
       dispute
     );
-    const [notifications, unreadCount] = await Promise.all([
-      listNotificationsByUserPublicId(req.auth.userId),
-      countUnreadNotificationsByUserPublicId(req.auth.userId)
-    ]);
 
     return res.status(201).json({
       status: "success",
@@ -141,9 +135,7 @@ async function submitDispute(req, res, next) {
         publicId: dispute.publicId,
         status: dispute.status,
         documents: dispute.documents,
-        notification,
-        unreadCount,
-        notifications
+        notification
       }
     });
   } catch (error) {

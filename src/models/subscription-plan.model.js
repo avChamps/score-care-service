@@ -10,6 +10,7 @@ function mapSubscriptionPlan(row) {
     publicId: row.publicId,
     planName: row.planName,
     billingCycle: getBillingCycle(row.publicId),
+    razorpayPlanId: row.razorpayPlanId,
     amount: Number(row.amount),
     currency: row.currency,
     offerTag: row.offerTag,
@@ -68,6 +69,7 @@ function subscriptionPlanSelect() {
   return `SELECT
     public_id AS publicId,
     plan_name AS planName,
+    razorpay_plan_id AS razorpayPlanId,
     amount,
     currency,
     offer_tag AS offerTag,
@@ -92,6 +94,7 @@ async function listActiveSubscriptionPlans() {
     `SELECT
       public_id AS publicId,
       plan_name AS planName,
+      razorpay_plan_id AS razorpayPlanId,
       amount,
       currency,
       offer_tag AS offerTag,
@@ -126,6 +129,7 @@ async function createSubscriptionPlan(values) {
     `INSERT INTO subscription_plans (
       public_id,
       plan_name,
+      razorpay_plan_id,
       amount,
       currency,
       offer_tag,
@@ -141,10 +145,11 @@ async function createSubscriptionPlan(values) {
       display_order,
       is_active
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       values.publicId,
       values.planName,
+      values.razorpayPlanId,
       values.amount,
       values.currency,
       values.offerTag,
@@ -183,6 +188,7 @@ async function updateSubscriptionPlanByPublicId(publicId, values) {
   const columnMap = {
     planName: "plan_name",
     amount: "amount",
+    razorpayPlanId: "razorpay_plan_id",
     currency: "currency",
     offerTag: "offer_tag",
     recommendedFor: "recommended_for",
@@ -227,10 +233,182 @@ async function updateSubscriptionPlanByPublicId(publicId, values) {
   return findSubscriptionPlanByPublicId(publicId);
 }
 
+function getDateFromUnix(value) {
+  const timestamp = Number(value || 0);
+
+  return timestamp > 0 ? new Date(timestamp * 1000) : null;
+}
+
+function addBillingCycle(date, billingCycle) {
+  const dueAt = new Date(date);
+
+  if (billingCycle === "yearly") {
+    dueAt.setFullYear(dueAt.getFullYear() + 1);
+  } else {
+    dueAt.setMonth(dueAt.getMonth() + 1);
+  }
+
+  return dueAt;
+}
+
+async function setPendingGatewaySubscription({
+  userId,
+  planPublicId,
+  razorpaySubscriptionId
+}) {
+  const [planRows] = await pool.query(
+    "SELECT id FROM subscription_plans WHERE public_id = ? AND is_active = 1 LIMIT 1",
+    [planPublicId]
+  );
+
+  if (planRows.length === 0) {
+    return null;
+  }
+
+  await pool.query(
+    `UPDATE users
+    SET
+      subscription_plan_id = ?,
+      razorpay_subscription_id = ?,
+      subscription_status = 'past_due',
+      updated_at = NOW()
+    WHERE id = ?`,
+    [planRows[0].id, razorpaySubscriptionId, userId]
+  );
+
+  return findSubscriptionPlanByPublicId(planPublicId);
+}
+
+async function updateGatewaySubscriptionPayment({
+  userId,
+  razorpaySubscriptionId,
+  razorpayPaymentId,
+  amount,
+  currency,
+  paymentStatus,
+  paidAt,
+  currentEnd,
+  notes
+}) {
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    const userQuery = userId
+      ? "SELECT id, subscription_plan_id FROM users WHERE id = ? LIMIT 1 FOR UPDATE"
+      : "SELECT id, subscription_plan_id FROM users WHERE razorpay_subscription_id = ? LIMIT 1 FOR UPDATE";
+    const [userRows] = await connection.query(userQuery, [
+      userId || razorpaySubscriptionId
+    ]);
+
+    if (userRows.length === 0) {
+      await connection.rollback();
+      return null;
+    }
+
+    const user = userRows[0];
+    const [planRows] = await connection.query(
+      "SELECT public_id AS publicId FROM subscription_plans WHERE id = ? LIMIT 1",
+      [user.subscription_plan_id]
+    );
+    const billingCycle = getBillingCycle(planRows[0]?.publicId);
+    const subscriptionStartedAt = paidAt || new Date();
+    const subscriptionDueAt = currentEnd || addBillingCycle(subscriptionStartedAt, billingCycle);
+    const subscriptionStatus = paymentStatus === "paid" ? "active" : "past_due";
+
+    await connection.query(
+      `UPDATE users
+      SET
+        razorpay_subscription_id = ?,
+        subscription_status = ?,
+        subscription_started_at = COALESCE(subscription_started_at, ?),
+        subscription_due_at = ?,
+        subscription_ends_at = ?,
+        updated_at = NOW()
+      WHERE id = ?`,
+      [
+        razorpaySubscriptionId,
+        subscriptionStatus,
+        subscriptionStartedAt,
+        subscriptionDueAt,
+        subscriptionDueAt,
+        user.id
+      ]
+    );
+
+    await connection.query(
+      `INSERT INTO subscription_payments (
+        user_id,
+        subscription_plan_id,
+        amount,
+        currency,
+        payment_status,
+        payment_gateway,
+        razorpay_subscription_id,
+        razorpay_payment_id,
+        paid_at,
+        gateway_payload
+      )
+      VALUES (?, ?, ?, ?, ?, 'razorpay', ?, ?, ?, ?)
+      ON DUPLICATE KEY UPDATE
+        amount = VALUES(amount),
+        currency = VALUES(currency),
+        payment_status = VALUES(payment_status),
+        paid_at = VALUES(paid_at),
+        gateway_payload = VALUES(gateway_payload),
+        updated_at = NOW()`,
+      [
+        user.id,
+        user.subscription_plan_id,
+        amount,
+        currency,
+        paymentStatus,
+        razorpaySubscriptionId,
+        razorpayPaymentId,
+        paidAt,
+        JSON.stringify(notes || {})
+      ]
+    );
+
+    await connection.commit();
+
+    return findSubscriptionPlanByPublicId(planRows[0]?.publicId);
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+async function updateGatewaySubscriptionStatus({
+  razorpaySubscriptionId,
+  subscriptionStatus,
+  currentEnd
+}) {
+  const [result] = await pool.query(
+    `UPDATE users
+    SET
+      subscription_status = ?,
+      subscription_due_at = COALESCE(?, subscription_due_at),
+      subscription_ends_at = COALESCE(?, subscription_ends_at),
+      updated_at = NOW()
+    WHERE razorpay_subscription_id = ?`,
+    [subscriptionStatus, currentEnd, currentEnd, razorpaySubscriptionId]
+  );
+
+  return result.affectedRows > 0;
+}
+
 module.exports = {
   createSubscriptionPlan,
   findSubscriptionPlanByPublicId,
+  getDateFromUnix,
   listActiveSubscriptionPlans,
   listAllSubscriptionPlans,
+  setPendingGatewaySubscription,
+  updateGatewaySubscriptionPayment,
+  updateGatewaySubscriptionStatus,
   updateSubscriptionPlanByPublicId
 };

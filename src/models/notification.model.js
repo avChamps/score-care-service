@@ -173,7 +173,7 @@ async function createCibilRepairRequestUpdatedNotification(userId, request) {
   return createNotification(userId, {
     type: "cibil_repair_request_updated",
     title: "CIBIL dispute updated",
-    message: "Your CIBIL dispute request has been updated.",
+    message: `Your CIBIL dispute request status is ${request.repairStatus}.`,
     notificationKey: `cibil_repair_request_updated:${request.id}:${Date.now()}`,
     data: {
       repairRequestId: request.id,
