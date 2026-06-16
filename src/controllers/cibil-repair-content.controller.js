@@ -13,8 +13,10 @@ const {
   updateCibilRepairRequest
 } = require("../models/cibil-repair-request.model");
 const {
+  countUnreadNotificationsByUserPublicId,
   createCibilRepairRequestCreatedNotification,
-  createCibilRepairRequestUpdatedNotification
+  createCibilRepairRequestUpdatedNotification,
+  listNotificationsByUserPublicId
 } = require("../models/notification.model");
 const { findUserByPublicId } = require("../models/user.model");
 const {
@@ -404,13 +406,19 @@ async function createMyCibilRepairRequest(req, res, next) {
       req.auth.internalUserId,
       request
     );
+    const [notifications, unreadCount] = await Promise.all([
+      listNotificationsByUserPublicId(req.auth.userId),
+      countUnreadNotificationsByUserPublicId(req.auth.userId)
+    ]);
 
     return res.status(201).json({
       status: "success",
       message: "CIBIL repair request saved successfully",
       data: {
         request,
-        notification
+        notification,
+        unreadCount,
+        notifications
       }
     });
   } catch (error) {
