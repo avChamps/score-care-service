@@ -32,6 +32,167 @@ function mapNotification(row) {
   };
 }
 
+function mapUserFcmToken(row) {
+  if (!row) {
+    return null;
+  }
+
+  return {
+    id: row.id,
+    userId: row.userId,
+    fcmToken: row.fcmToken,
+    platform: row.platform,
+    deviceId: row.deviceId,
+    isActive: Boolean(row.isActive),
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt
+  };
+}
+
+async function upsertUserFcmToken(userId, token) {
+  const [updateResult] = await pool.query(
+    `UPDATE user_fcm_tokens
+    SET
+      user_id = ?,
+      platform = ?,
+      device_id = ?,
+      is_active = 1,
+      updated_at = NOW()
+    WHERE fcm_token = ?`,
+    [
+      userId,
+      token.platform || "android",
+      token.deviceId || null,
+      token.fcmToken
+    ]
+  );
+
+  if (!updateResult.affectedRows) {
+    const [insertResult] = await pool.query(
+      `INSERT INTO user_fcm_tokens (
+        user_id,
+        fcm_token,
+        platform,
+        device_id
+      )
+      VALUES (?, ?, ?, ?)`,
+      [
+        userId,
+        token.fcmToken,
+        token.platform || "android",
+        token.deviceId || null
+      ]
+    );
+
+    return findUserFcmTokenById(insertResult.insertId);
+  }
+
+  return findUserFcmTokenByToken(token.fcmToken);
+}
+
+async function findUserFcmTokenById(id) {
+  const [rows] = await pool.query(
+    `SELECT
+      id,
+      user_id AS userId,
+      fcm_token AS fcmToken,
+      platform,
+      device_id AS deviceId,
+      is_active AS isActive,
+      created_at AS createdAt,
+      updated_at AS updatedAt
+    FROM user_fcm_tokens
+    WHERE id = ?`,
+    [id]
+  );
+
+  return mapUserFcmToken(rows[0]);
+}
+
+async function findUserFcmTokenByToken(fcmToken) {
+  const [rows] = await pool.query(
+    `SELECT
+      id,
+      user_id AS userId,
+      fcm_token AS fcmToken,
+      platform,
+      device_id AS deviceId,
+      is_active AS isActive,
+      created_at AS createdAt,
+      updated_at AS updatedAt
+    FROM user_fcm_tokens
+    WHERE fcm_token = ?
+    ORDER BY updated_at DESC, id DESC
+    LIMIT 1`,
+    [fcmToken]
+  );
+
+  return mapUserFcmToken(rows[0]);
+}
+
+async function listActiveFcmTokensByUserIds(userIds) {
+  const ids = [...new Set(userIds.map(Number).filter(Boolean))];
+
+  if (!ids.length) {
+    return [];
+  }
+
+  const [rows] = await pool.query(
+    `SELECT
+      id,
+      user_id AS userId,
+      fcm_token AS fcmToken,
+      platform,
+      device_id AS deviceId,
+      is_active AS isActive,
+      created_at AS createdAt,
+      updated_at AS updatedAt
+    FROM user_fcm_tokens
+    WHERE is_active = 1
+      AND user_id IN (?)`,
+    [ids]
+  );
+
+  return rows.map(mapUserFcmToken);
+}
+
+async function listAllActiveFcmTokens() {
+  const [rows] = await pool.query(
+    `SELECT
+      id,
+      user_id AS userId,
+      fcm_token AS fcmToken,
+      platform,
+      device_id AS deviceId,
+      is_active AS isActive,
+      created_at AS createdAt,
+      updated_at AS updatedAt
+    FROM user_fcm_tokens
+    WHERE is_active = 1`
+  );
+
+  return rows.map(mapUserFcmToken);
+}
+
+async function disableFcmTokens(fcmTokens) {
+  const tokens = [...new Set(fcmTokens.filter(Boolean))];
+
+  if (!tokens.length) {
+    return 0;
+  }
+
+  const [result] = await pool.query(
+    `UPDATE user_fcm_tokens
+    SET
+      is_active = 0,
+      updated_at = NOW()
+    WHERE fcm_token IN (?)`,
+    [tokens]
+  );
+
+  return result.affectedRows;
+}
+
 async function createNotification(userId, notification) {
   const [userRows] = await pool.query(
     "SELECT public_id AS publicId FROM users WHERE id = ?",
@@ -364,7 +525,11 @@ module.exports = {
   createLoanStatusUpdatedNotification,
   createMonthlyCibilReportNotifications,
   createNotification,
+  disableFcmTokens,
   listNotificationsByUserPublicId,
+  listActiveFcmTokensByUserIds,
+  listAllActiveFcmTokens,
   markAllNotificationsReadByUserPublicId,
-  markNotificationReadByUserPublicId
+  markNotificationReadByUserPublicId,
+  upsertUserFcmToken
 };

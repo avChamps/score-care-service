@@ -30,6 +30,12 @@ CREATE TABLE IF NOT EXISTS cibil_repair_timelines (
   KEY idx_cibil_repair_timelines_active_order (is_active, display_order)
 );
 
+ALTER TABLE cibil_repair_plans
+  ADD COLUMN billing_cycle VARCHAR(40) NULL AFTER currency;
+
+ALTER TABLE cibil_repair_plans
+  ADD COLUMN button_label VARCHAR(120) NULL AFTER billing_cycle;
+
 INSERT INTO cibil_repair_plans (
   public_id,
   plan_name,

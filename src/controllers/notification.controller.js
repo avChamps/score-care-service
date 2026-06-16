@@ -2,8 +2,10 @@ const {
   countUnreadNotificationsByUserPublicId,
   listNotificationsByUserPublicId,
   markAllNotificationsReadByUserPublicId,
-  markNotificationReadByUserPublicId
+  markNotificationReadByUserPublicId,
+  upsertUserFcmToken
 } = require("../models/notification.model");
+const { sendToUser } = require("../services/notification.service");
 
 async function getMyNotifications(req, res, next) {
   try {
@@ -72,8 +74,68 @@ async function readAllNotifications(req, res, next) {
   }
 }
 
+async function registerDevice(req, res, next) {
+  try {
+    const fcmToken = String(req.body.fcmToken || "").trim();
+
+    if (!fcmToken) {
+      return res.status(400).json({
+        status: "error",
+        message: "fcmToken is required"
+      });
+    }
+
+    const token = await upsertUserFcmToken(req.auth.internalUserId, {
+      fcmToken,
+      platform: req.body.platform || "android",
+      deviceId: req.body.deviceId || null
+    });
+
+    return res.status(200).json({
+      status: "success",
+      message: "Device registered",
+      data: {
+        token
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function sendTestNotification(req, res, next) {
+  try {
+    const userId = Number(req.body.userId);
+
+    if (!userId || !req.body.title || !req.body.body) {
+      return res.status(400).json({
+        status: "error",
+        message: "userId, title and body are required"
+      });
+    }
+
+    const result = await sendToUser(userId, {
+      title: req.body.title,
+      body: req.body.body,
+      imageUrl: req.body.imageUrl || "",
+      data: req.body.data || {},
+      screen: req.body.screen
+    });
+
+    return res.status(200).json({
+      status: "success",
+      message: "Test notification sent",
+      data: result
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
   getMyNotifications,
   readAllNotifications,
-  readNotification
+  readNotification,
+  registerDevice,
+  sendTestNotification
 };

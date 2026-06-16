@@ -65,6 +65,7 @@ app.use("/improve-tool-analytics", improveToolAnalyticsRoutes);
 app.use("/legal-content", legalContentRoutes);
 app.use("/loans", loanRoutes);
 app.use("/notifications", notificationRoutes);
+app.use("/api/notifications", notificationRoutes);
 app.use("/subscription-plans", subscriptionPlanRoutes);
 app.use("/users", userRoutes);
 
