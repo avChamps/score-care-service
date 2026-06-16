@@ -1582,12 +1582,18 @@ function renderAccountCards(accounts) {
 
   return accounts.map((account, index) => {
     const status = getCrifAccountStatus(account);
+    const bankName = firstValue(
+      account["CREDIT-GUARANTOR"],
+      account["CREDIT-GRANTOR"],
+      account.creditGrantor,
+      account.bankName
+    );
 
     return `
       <div class="account-card">
         <div class="account-head">
           <div>
-            <strong>${index + 1}. ${escapeHtml(account["CREDIT-GRANTOR"])}</strong>
+            <strong>${index + 1}. ${escapeHtml(bankName)}</strong>
             <p>${escapeHtml(firstValue(account["ACCT-TYPE"], account["ACCOUNT-TYPE"]))} &bull; ${escapeHtml(account["ACCT-NUMBER"])}</p>
           </div>
           <span class="status ${status.toLowerCase() === "closed" ? "closed" : "active"}">${escapeHtml(status)}</span>
@@ -1596,7 +1602,7 @@ function renderAccountCards(accounts) {
         <div class="account-grid">
           <div><span>Account Number</span><strong>${escapeHtml(account["ACCT-NUMBER"])}</strong></div>
           <div><span>Account Type</span><strong>${escapeHtml(firstValue(account["ACCT-TYPE"], account["ACCOUNT-TYPE"]))}</strong></div>
-          <div><span>Credit Grantor</span><strong>${escapeHtml(account["CREDIT-GRANTOR"])}</strong></div>
+          <div><span>Credit Grantor</span><strong>${escapeHtml(bankName)}</strong></div>
           <div><span>Info As Of</span><strong>${escapeHtml(account["DATE-REPORTED"])}</strong></div>
           <div><span>Ownership</span><strong>${escapeHtml(account["OWNERSHIP-IND"])}</strong></div>
           <div><span>Credit Limit</span><strong>${escapeHtml(formatAmount(account["CREDIT-LIMIT"]))}</strong></div>
@@ -1705,7 +1711,7 @@ async function createCibilReportPdfBuffer(savedReport) {
       displayHeaderFooter: true,
       headerTemplate: "<div></div>",
       footerTemplate: `
-        <div style="width:100%;padding:0 12mm;font-family:Arial,sans-serif;font-size:9px;color:#555;display:flex;justify-content:space-between;align-items:center;">
+        <div style="width:100%;padding:0 12mm;font-family:Arial,sans-serif;font-size:12px;color:#555;display:flex;justify-content:space-between;align-items:center;">
           <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
           <span>Downloaded: ${downloadedAt}</span>
         </div>
