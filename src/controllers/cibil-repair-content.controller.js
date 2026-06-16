@@ -36,6 +36,12 @@ const repairStatuses = new Set([
   "closed",
   "cancelled"
 ]);
+const activeRepairStatuses = new Set([
+  "upload_document",
+  "submitted",
+  "analysis",
+  "in_progress"
+]);
 
 function normalizeString(value) {
   return String(value || "").trim();
@@ -473,7 +479,7 @@ async function getMyCibilRepairRequest(req, res, next) {
       status: "success",
       data: {
         activeDisputes: requests.filter(
-          (request) => request.repairStatus === "submitted"
+          (request) => activeRepairStatuses.has(request.repairStatus)
         ).length,
         resolvedDisputes: requests.filter(
           (request) => request.repairStatus === "resolved"

@@ -21,9 +21,11 @@ function getUploadedFileUrl(req) {
 
 function validateCreditRepairDocumentPayload(req) {
   const errors = [];
-  const accountNumber = normalizeString(req.body.accountNumber);
+  const accountNumber = normalizeString(
+    req.body.accountNumber || req.body.creditCardNumber || req.body.loanNumber
+  );
   const accountType = normalizeString(req.body.accountType);
-  const documentType = normalizeString(req.body.documentType);
+  const documentType = normalizeString(req.body.documentType || "document");
 
   if (!accountNumber) {
     errors.push("accountNumber is required");
@@ -31,10 +33,6 @@ function validateCreditRepairDocumentPayload(req) {
 
   if (!accountType) {
     errors.push("accountType is required");
-  }
-
-  if (!documentType) {
-    errors.push("documentType is required");
   }
 
   if (!req.file) {
