@@ -1,4 +1,5 @@
-const admin = require("firebase-admin");
+const { cert, getApps, initializeApp } = require("firebase-admin/app");
+const { getMessaging: getFirebaseMessaging } = require("firebase-admin/messaging");
 
 const env = require("../config/env");
 
@@ -27,17 +28,19 @@ function getServiceAccount() {
 }
 
 function getFirebaseApp() {
-  if (admin.apps.length) {
-    return admin.app();
+  const apps = getApps();
+
+  if (apps.length) {
+    return apps[0];
   }
 
-  return admin.initializeApp({
-    credential: admin.credential.cert(getServiceAccount())
+  return initializeApp({
+    credential: cert(getServiceAccount())
   });
 }
 
 function getMessaging() {
-  return getFirebaseApp().messaging();
+  return getFirebaseMessaging(getFirebaseApp());
 }
 
 module.exports = {
