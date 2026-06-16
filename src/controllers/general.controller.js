@@ -2,6 +2,9 @@ const {
   getGeneralSettings,
   updateGeneralSettings
 } = require("../models/general-setting.model");
+const {
+  listActiveHomepageImageThemes
+} = require("../models/homepage-image-theme.model");
 
 async function getGeneralDetails(_req, res, next) {
   try {
@@ -10,6 +13,19 @@ async function getGeneralDetails(_req, res, next) {
     return res.status(200).json({
       status: "success",
       data: general
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getHomepageImageThemes(_req, res, next) {
+  try {
+    const themes = await listActiveHomepageImageThemes();
+
+    return res.status(200).json({
+      status: "success",
+      data: themes
     });
   } catch (error) {
     next(error);
@@ -88,5 +104,6 @@ async function saveAdminGeneralDetails(req, res, next) {
 module.exports = {
   getAdminGeneralDetails,
   getGeneralDetails,
+  getHomepageImageThemes,
   saveAdminGeneralDetails
 };
