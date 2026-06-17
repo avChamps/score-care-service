@@ -31,12 +31,12 @@ async function getDashboardCounts() {
         COUNT(*) AS totalUsers,
         SUM(CASE WHEN DATE(created_at) = CURRENT_DATE THEN 1 ELSE 0 END) AS newUsers,
         SUM(CASE
-          WHEN subscription_status = 'active'
+          WHEN subscription_status IN ('active', 'cancelled')
             AND (subscription_due_at IS NULL OR subscription_due_at >= NOW())
           THEN 1 ELSE 0
         END) AS subscriptions,
         SUM(CASE
-          WHEN subscription_status = 'active'
+          WHEN subscription_status IN ('active', 'cancelled')
             AND subscription_due_at > NOW()
             AND subscription_due_at <= DATE_ADD(NOW(), INTERVAL 7 DAY)
           THEN 1 ELSE 0
@@ -73,7 +73,7 @@ async function getDashboardCounts() {
     pool.query(
       `SELECT
         CASE
-          WHEN subscription_status = 'active'
+          WHEN subscription_status IN ('active', 'cancelled')
             AND (subscription_due_at IS NULL OR subscription_due_at >= NOW())
           THEN 'paid'
           ELSE 'free'
@@ -268,7 +268,7 @@ async function listAdminUsers(options = {}) {
         u.is_admin AS isAdmin,
         u.status,
         CASE
-          WHEN u.subscription_status = 'active'
+          WHEN u.subscription_status IN ('active', 'cancelled')
             AND (u.subscription_due_at IS NULL OR u.subscription_due_at >= NOW())
           THEN 'paid'
           ELSE 'free'
@@ -351,7 +351,7 @@ async function exportAdminUsers(options = {}) {
       u.is_admin AS isAdmin,
       u.status,
       CASE
-        WHEN u.subscription_status = 'active'
+        WHEN u.subscription_status IN ('active', 'cancelled')
           AND (u.subscription_due_at IS NULL OR u.subscription_due_at >= NOW())
         THEN 'paid'
         ELSE 'free'
@@ -789,7 +789,7 @@ async function updateUserSubscriptionByPublicId(publicId, subscription) {
         u.is_admin AS isAdmin,
         u.status,
         CASE
-          WHEN u.subscription_status = 'active'
+          WHEN u.subscription_status IN ('active', 'cancelled')
             AND (u.subscription_due_at IS NULL OR u.subscription_due_at >= NOW())
           THEN 'paid'
           ELSE 'free'

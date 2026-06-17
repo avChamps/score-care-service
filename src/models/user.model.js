@@ -48,7 +48,7 @@ async function findUserById(id) {
       selected_language AS selectedLanguage,
       is_admin AS isAdmin,
       CASE
-        WHEN subscription_status = 'active'
+        WHEN subscription_status IN ('active', 'cancelled')
           AND (subscription_due_at IS NULL OR subscription_due_at >= NOW())
         THEN 'paid'
         ELSE 'free'
@@ -82,7 +82,7 @@ async function findUserByPublicId(publicId) {
       selected_language AS selectedLanguage,
       is_admin AS isAdmin,
       CASE
-        WHEN subscription_status = 'active'
+        WHEN subscription_status IN ('active', 'cancelled')
           AND (subscription_due_at IS NULL OR subscription_due_at >= NOW())
         THEN 'paid'
         ELSE 'free'
