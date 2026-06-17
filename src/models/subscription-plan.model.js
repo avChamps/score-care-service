@@ -20,6 +20,7 @@ function mapSubscriptionPlan(row) {
     description: row.description,
     imageUrl: row.imageUrl,
     benefits: parseJsonArray(row.benefits),
+    comparisonBenefits: parseJsonArray(row.comparisonBenefits),
     features: parseJsonArray(row.features),
     buttonLabel: row.buttonLabel,
     skipLabel: row.skipLabel,
@@ -79,6 +80,7 @@ function subscriptionPlanSelect() {
     description,
     image_url AS imageUrl,
     benefits,
+    comparison_benefits AS comparisonBenefits,
     features,
     button_label AS buttonLabel,
     skip_label AS skipLabel,
@@ -104,6 +106,7 @@ async function listActiveSubscriptionPlans() {
       description,
       image_url AS imageUrl,
       benefits,
+      comparison_benefits AS comparisonBenefits,
       features,
       button_label AS buttonLabel,
       skip_label AS skipLabel
@@ -139,13 +142,14 @@ async function createSubscriptionPlan(values) {
       description,
       image_url,
       benefits,
+      comparison_benefits,
       features,
       button_label,
       skip_label,
       display_order,
       is_active
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       values.publicId,
       values.planName,
@@ -159,6 +163,7 @@ async function createSubscriptionPlan(values) {
       values.description,
       values.imageUrl,
       JSON.stringify(values.benefits || []),
+      JSON.stringify(values.comparisonBenefits || []),
       JSON.stringify(values.features || []),
       values.buttonLabel,
       values.skipLabel,
@@ -197,6 +202,7 @@ async function updateSubscriptionPlanByPublicId(publicId, values) {
     description: "description",
     imageUrl: "image_url",
     benefits: "benefits",
+    comparisonBenefits: "comparison_benefits",
     features: "features",
     buttonLabel: "button_label",
     skipLabel: "skip_label",
@@ -215,7 +221,9 @@ async function updateSubscriptionPlanByPublicId(publicId, values) {
     .map(([key]) => `${columnMap[key]} = ?`)
     .join(", ");
   const params = entries.map(([key, value]) =>
-    key === "benefits" || key === "features" ? JSON.stringify(value) : value
+    key === "benefits" || key === "comparisonBenefits" || key === "features"
+      ? JSON.stringify(value)
+      : value
   );
 
   const [result] = await pool.query(

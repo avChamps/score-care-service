@@ -93,6 +93,25 @@ function normalizeStringArray(value) {
   return value.map((item) => normalizeString(item)).filter(Boolean);
 }
 
+function normalizeComparisonBenefits(value) {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  return value
+    .filter((item) => item && typeof item === "object")
+    .map((item) => ({
+      benefit: normalizeString(item.benefit),
+      free: item.free,
+      scorecarePro: item.scorecarePro
+    }))
+    .filter((item) => item.benefit);
+}
+
 function toRazorpayAmount(amount) {
   return Math.round(Number(amount || 0)) / 100;
 }
@@ -181,6 +200,18 @@ function validateSubscriptionPlanPayload(body, { isCreate = false } = {}) {
     }
   } else if (isCreate) {
     value.benefits = [];
+  }
+
+  if (Object.prototype.hasOwnProperty.call(body, "comparisonBenefits")) {
+    value.comparisonBenefits = normalizeComparisonBenefits(
+      body.comparisonBenefits
+    );
+
+    if (value.comparisonBenefits === null) {
+      errors.push("comparisonBenefits must be an array");
+    }
+  } else if (isCreate) {
+    value.comparisonBenefits = [];
   }
 
   if (Object.prototype.hasOwnProperty.call(body, "features")) {
