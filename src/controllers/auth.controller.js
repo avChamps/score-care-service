@@ -8,10 +8,11 @@ const {
 } = require("../models/user.model");
 const { createAuthToken } = require("../services/token.service");
 const {
-  sendUserLoginWhatsappAlert,
-  sendUserCreatedWhatsappAlert
-} = require("../services/whatsapp.service");
+  sendFirstTimeWelcomeWhatsapp,
+  sendWhatsAppSafely
+} = require("../services/whatsappNotification.service");
 const {
+  createFirstTimeUserWelcomeNotification,
   createFreeTierCreatedNotification
 } = require("../models/notification.model");
 const {
@@ -80,17 +81,17 @@ async function verifyOtp(req, res, next) {
       deviceId: req.body.deviceId || null,
       metadata: req.body.metadata || null
     });
-    const whatsappAlert = isNewUser
-      ? await sendUserCreatedWhatsappAlert(user)
-      : await sendUserLoginWhatsappAlert(user, {
-        loginMethod: "otp",
-        ipAddress: req.ip,
-        deviceId: req.body.deviceId || null
-      });
     const freeTierNotification = isNewUser
       ? await createFreeTierCreatedNotification(user.internalId)
       : null;
+    const welcomeNotification = isNewUser
+      ? await createFirstTimeUserWelcomeNotification(user.internalId)
+      : null;
     await sendStoredNotificationToUser(user.internalId, freeTierNotification);
+    await sendStoredNotificationToUser(user.internalId, welcomeNotification);
+    const welcomeWhatsapp = isNewUser
+      ? await sendWhatsAppSafely(() => sendFirstTimeWelcomeWhatsapp(user))
+      : { status: "skipped", reason: "Existing user" };
     const token = createAuthToken({
       userId: user.publicId,
       mobileNumber,
@@ -114,7 +115,8 @@ async function verifyOtp(req, res, next) {
         shouldShowPanDetailsForm: !profileComplete,
         loginEventId,
         freeTierNotification,
-        whatsappAlert,
+        welcomeNotification,
+        welcomeWhatsapp,
         otpProvider: otpResponse
       }
     });

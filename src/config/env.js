@@ -41,10 +41,14 @@ msg91: {
     }
   },
   notifications: {
+    dailyReminderCron:
+      process.env.DAILY_NOTIFICATION_REMINDER_CRON || "0 9 * * *",
     monthlyCibilEnabled:
       process.env.MONTHLY_CIBIL_NOTIFICATION_ENABLED !== "false",
     monthlyCibilCron:
       process.env.MONTHLY_CIBIL_NOTIFICATION_CRON || "0 9 1 * *",
+    remindersEnabled:
+      process.env.NOTIFICATION_REMINDERS_ENABLED !== "false",
     timezone: process.env.NOTIFICATION_TIMEZONE || "Asia/Kolkata"
   },
   firebase: {
@@ -54,9 +58,13 @@ msg91: {
     privateKey: (process.env.FIREBASE_PRIVATE_KEY || "").trim().replace(/\\n/g, "\n")
   },
   whatsapp: {
-    enabled: process.env.WHATSAPP_ALERT_ENABLED === "true",
+    enabled:
+      process.env.WHATSAPP_ALERT_ENABLED === "true" ||
+      Boolean(process.env.WHATSAPP_GROUP_JID) ||
+      Boolean(process.env.WHATSAPP_ALERT_NUMBER),
     alertNumber: (process.env.WHATSAPP_ALERT_NUMBER || "").trim(),
-    sessionDir: process.env.WHATSAPP_SESSION_DIR || "whatsapp-session"
+    groupJid: (process.env.WHATSAPP_GROUP_JID || "").trim(),
+    sessionDir: process.env.WHATSAPP_SESSION_DIR || "baileys_auth"
   },
   smtp: {
     host: process.env.SMTP_HOST || "smtp.titan.email",

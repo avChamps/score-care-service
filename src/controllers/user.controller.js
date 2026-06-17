@@ -10,9 +10,9 @@ const {
   upsertUserForLogin
 } = require("../models/user.model");
 const {
-  sendUserLoginWhatsappAlert,
-  sendUserCreatedWhatsappAlert
-} = require("../services/whatsapp.service");
+  sendFirstTimeWelcomeWhatsapp,
+  sendWhatsAppSafely
+} = require("../services/whatsappNotification.service");
 const {
   sendWelcomeEmail
 } = require("../services/profile-email.service");
@@ -20,6 +20,7 @@ const {
   findCrifScoreByUserId
 } = require("../models/credit-report.model");
 const {
+  createFirstTimeUserWelcomeNotification,
   createFreeTierCreatedNotification
 } = require("../models/notification.model");
 const {
@@ -112,17 +113,17 @@ async function recordUserLogin(req, res, next) {
       deviceId: value.deviceId,
       metadata: value.metadata
     });
-    const whatsappAlert = isNewUser
-      ? await sendUserCreatedWhatsappAlert(user)
-      : await sendUserLoginWhatsappAlert(user, {
-        loginMethod: value.loginMethod,
-        ipAddress: req.ip,
-        deviceId: value.deviceId
-      });
     const freeTierNotification = isNewUser
       ? await createFreeTierCreatedNotification(user.internalId)
       : null;
+    const welcomeNotification = isNewUser
+      ? await createFirstTimeUserWelcomeNotification(user.internalId)
+      : null;
     await sendStoredNotificationToUser(user.internalId, freeTierNotification);
+    await sendStoredNotificationToUser(user.internalId, welcomeNotification);
+    const welcomeWhatsapp = isNewUser
+      ? await sendWhatsAppSafely(() => sendFirstTimeWelcomeWhatsapp(user))
+      : { status: "skipped", reason: "Existing user" };
 
     return res.status(201).json({
       status: "success",
@@ -131,7 +132,8 @@ async function recordUserLogin(req, res, next) {
         loginEventId,
         isNewUser,
         freeTierNotification,
-        whatsappAlert
+        welcomeNotification,
+        welcomeWhatsapp
       }
     });
   } catch (error) {

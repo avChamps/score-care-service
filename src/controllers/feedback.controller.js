@@ -6,9 +6,14 @@ const {
 const {
   createFeedbackSubmittedNotification
 } = require("../models/notification.model");
+const { findUserById } = require("../models/user.model");
 const {
   sendStoredNotificationToUser
 } = require("../services/mobile-notification.service");
+const {
+  sendFeedbackReceivedWhatsapp,
+  sendWhatsAppSafely
+} = require("../services/whatsappNotification.service");
 
 function normalizeOptionalString(value) {
   return value === undefined || value === null ? null : String(value).trim() || null;
@@ -121,13 +126,18 @@ async function saveMyFeedback(req, res, next) {
       feedback
     );
     await sendStoredNotificationToUser(req.auth.internalUserId, notification);
+    const user = await findUserById(req.auth.internalUserId);
+    const feedbackWhatsapp = await sendWhatsAppSafely(() => (
+      sendFeedbackReceivedWhatsapp(user)
+    ));
 
     return res.status(200).json({
       status: "success",
       message: "Feedback saved successfully",
       data: {
         feedback,
-        notification
+        notification,
+        feedbackWhatsapp
       }
     });
   } catch (error) {

@@ -28,6 +28,11 @@ const {
 const {
   sendStoredNotificationToUser
 } = require("../services/mobile-notification.service");
+const {
+  sendCreditImprovedWhatsapp,
+  sendDisputeStatusWhatsapp,
+  sendWhatsAppSafely
+} = require("../services/whatsappNotification.service");
 
 const paymentStatuses = new Set(["pending", "paid", "failed", "refunded"]);
 const repairStatuses = new Set([
@@ -612,13 +617,22 @@ async function updateAdminCibilRepairRequest(req, res, next) {
       request
     );
     await sendStoredNotificationToUser(user.internalId, notification);
+    const disputeWhatsapp = await sendWhatsAppSafely(() => sendDisputeStatusWhatsapp(
+      user,
+      request
+    ));
+    const creditImprovedWhatsapp = Number(request.pointsGained) > Number(existingRequest.pointsGained)
+      ? await sendWhatsAppSafely(() => sendCreditImprovedWhatsapp(user, request))
+      : { status: "skipped", reason: "Credit points not increased" };
 
     return res.status(200).json({
       status: "success",
       message: "CIBIL repair request updated successfully",
       data: {
         request,
-        notification
+        notification,
+        disputeWhatsapp,
+        creditImprovedWhatsapp
       }
     });
   } catch (error) {

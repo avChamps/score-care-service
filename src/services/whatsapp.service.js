@@ -8,6 +8,7 @@ const {
   useMultiFileAuthState
 } = require("@whiskeysockets/baileys");
 const pino = require("pino");
+const qrcode = require("qrcode-terminal");
 
 const env = require("../config/env");
 
@@ -56,34 +57,6 @@ function normalizeWhatsappNumber(number) {
   return digits;
 }
 
-function buildUserCreatedAlert(user) {
-  return [
-    "ScoreCare new user alert",
-    "",
-    `User ID: ${user.id}`,
-    `Mobile: ${user.mobileNumber}`,
-    `Name: ${user.fullName || "Not updated"}`,
-    `PAN: ${user.panNumber || "Not updated"}`,
-    `Email: ${user.email || "Not updated"}`,
-    `Created: ${user.createdAt || new Date().toISOString()}`
-  ].join("\n");
-}
-
-function buildUserLoginAlert(user, login = {}) {
-  return [
-    "ScoreCare user login alert",
-    "",
-    `User ID: ${user.id}`,
-    `Mobile: ${user.mobileNumber}`,
-    `Name: ${user.fullName || "Not updated"}`,
-    `PAN: ${user.panNumber || "Not updated"}`,
-    `Login method: ${login.loginMethod || "otp"}`,
-    `IP: ${login.ipAddress || "Not available"}`,
-    `Device ID: ${login.deviceId || "Not available"}`,
-    `Logged in: ${login.loggedInAt || new Date().toISOString()}`
-  ].join("\n");
-}
-
 async function startWhatsApp() {
   if (isStarting) {
     return sock;
@@ -109,14 +82,21 @@ async function startWhatsApp() {
     });
 
     sock.ev.on("creds.update", saveCreds);
-    sock.ev.on("connection.update", ({ connection, lastDisconnect }) => {
+    sock.ev.on("connection.update", ({ connection, lastDisconnect, qr }) => {
+      if (qr) {
+        console.log("[WA] Scan this QR:");
+        qrcode.generate(qr, { small: true });
+      }
+
       if (connection === "open") {
         clearReconnectTimer();
+        console.log("[WA] WhatsApp connected.");
       }
 
       if (connection === "close") {
         const statusCode = lastDisconnect?.error?.output?.statusCode;
         const forceFreshLogin = shouldForceFreshLogin(statusCode);
+        console.log(`[WA] Connection closed: ${statusCode || "unknown"}`);
 
         scheduleReconnect({
           forceFreshLogin,
@@ -134,7 +114,7 @@ async function startWhatsApp() {
   }
 }
 
-async function sendWhatsappMessage(toNumber, message) {
+async function sendWhatsAppGroupMessage(message, user = null) {
   if (!env.whatsapp.enabled) {
     return {
       status: "skipped",
@@ -142,12 +122,103 @@ async function sendWhatsappMessage(toNumber, message) {
     };
   }
 
-  const normalizedNumber = normalizeWhatsappNumber(toNumber);
+  const alertNumber = normalizeWhatsappNumber(env.whatsapp.alertNumber);
+  const userNumber = normalizeWhatsappNumber(user?.mobileNumber);
+  const recipient = env.whatsapp.groupJid ||
+    (alertNumber ? `${alertNumber}@s.whatsapp.net` : "") ||
+    (userNumber ? `${userNumber}@s.whatsapp.net` : "");
+
+  if (!recipient) {
+    return {
+      status: "failed",
+      reason: "WhatsApp alert recipient is not configured"
+    };
+  }
+
+  try {
+    const socket = sock || await startWhatsApp();
+
+    if (!socket) {
+      return {
+        status: "failed",
+        reason: "WhatsApp socket is not ready"
+      };
+    }
+
+    await socket.sendMessage(recipient, {
+      text: message
+    });
+
+    return {
+      status: "sent",
+      to: recipient
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      reason: error.message
+    };
+  }
+}
+
+async function sendWhatsAppAdminMessage(message) {
+  if (!env.whatsapp.enabled) {
+    return {
+      status: "skipped",
+      reason: "WhatsApp alerts are disabled"
+    };
+  }
+
+  const alertNumber = normalizeWhatsappNumber(env.whatsapp.alertNumber);
+  const recipient = env.whatsapp.groupJid || (alertNumber ? `${alertNumber}@s.whatsapp.net` : "");
+
+  if (!recipient) {
+    return {
+      status: "skipped",
+      reason: "WhatsApp admin recipient is not configured"
+    };
+  }
+
+  try {
+    const socket = sock || await startWhatsApp();
+
+    if (!socket) {
+      return {
+        status: "failed",
+        reason: "WhatsApp socket is not ready"
+      };
+    }
+
+    await socket.sendMessage(recipient, {
+      text: message
+    });
+
+    return {
+      status: "sent",
+      to: recipient
+    };
+  } catch (error) {
+    return {
+      status: "failed",
+      reason: error.message
+    };
+  }
+}
+
+async function sendWhatsAppUserMessage(user, message) {
+  if (!env.whatsapp.enabled) {
+    return {
+      status: "skipped",
+      reason: "WhatsApp alerts are disabled"
+    };
+  }
+
+  const normalizedNumber = normalizeWhatsappNumber(user?.mobileNumber);
 
   if (!normalizedNumber) {
     return {
       status: "skipped",
-      reason: "WhatsApp alert number is missing"
+      reason: "User WhatsApp number is missing"
     };
   }
 
@@ -177,20 +248,20 @@ async function sendWhatsappMessage(toNumber, message) {
   }
 }
 
-async function sendUserCreatedWhatsappAlert(user) {
-  const toNumber = env.whatsapp.alertNumber || user.mobileNumber;
-
-  return sendWhatsappMessage(toNumber, buildUserCreatedAlert(user));
-}
-
-async function sendUserLoginWhatsappAlert(user, login) {
-  const toNumber = env.whatsapp.alertNumber || user.mobileNumber;
-
-  return sendWhatsappMessage(toNumber, buildUserLoginAlert(user, login));
+async function sendWhatsAppSafely(handler) {
+  try {
+    return await handler();
+  } catch (error) {
+    return {
+      status: "failed",
+      reason: error.message
+    };
+  }
 }
 
 module.exports = {
-  sendUserLoginWhatsappAlert,
-  sendUserCreatedWhatsappAlert,
+  sendWhatsAppAdminMessage,
+  sendWhatsAppUserMessage,
+  sendWhatsAppSafely,
   startWhatsApp
 };

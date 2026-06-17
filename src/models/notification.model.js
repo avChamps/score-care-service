@@ -300,6 +300,18 @@ async function createFreeTierCreatedNotification(userId) {
   });
 }
 
+async function createFirstTimeUserWelcomeNotification(userId) {
+  return createNotification(userId, {
+    type: "first_time_user_welcome",
+    title: "Welcome to ScoreCare",
+    message: "Welcome to ScoreCare. Your account is ready. Login anytime to check your credit data.",
+    notificationKey: "first_time_user_welcome",
+    data: {
+      source: "signup"
+    }
+  });
+}
+
 async function createCibilRepairRequestCreatedNotification(userId, request) {
   return createNotification(userId, {
     type: "cibil_repair_request_created",
@@ -406,6 +418,100 @@ async function createMonthlyCibilReportNotifications(monthKey) {
     affectedRows: result.affectedRows,
     userIds: userRows.map((row) => row.userId)
   };
+}
+
+async function createSubscriptionRenewalReminderNotifications() {
+  const [userRows] = await pool.query(
+    `SELECT
+      id AS userId,
+      public_id AS publicId,
+      mobile_number AS mobileNumber,
+      full_name AS fullName,
+      subscription_due_at AS subscriptionDueAt
+    FROM users
+    WHERE status = 'active'
+      AND subscription_status = 'active'
+      AND subscription_due_at >= CURDATE()
+      AND subscription_due_at < DATE_ADD(CURDATE(), INTERVAL 3 DAY)
+      AND subscription_due_at >= DATE_ADD(CURDATE(), INTERVAL 2 DAY)
+      AND mobile_number IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM notifications n
+        WHERE n.user_id = users.id
+          AND n.notification_key = CONCAT(
+            'subscription_renewal_reminder:',
+            DATE_FORMAT(users.subscription_due_at, '%Y-%m-%d')
+          )
+      )`
+  );
+
+  const notifications = [];
+
+  for (const user of userRows) {
+    const dueDate = new Date(user.subscriptionDueAt).toISOString().slice(0, 10);
+    const notification = await createNotification(user.userId, {
+      type: "subscription_renewal_reminder",
+      title: "Subscription renewal reminder",
+      message: `Your ScoreCare subscription renews on ${dueDate}. Please keep your payment method ready.`,
+      notificationKey: `subscription_renewal_reminder:${dueDate}`,
+      data: {
+        subscriptionDueAt: user.subscriptionDueAt
+      }
+    });
+
+    notifications.push({
+      user,
+      notification
+    });
+  }
+
+  return notifications;
+}
+
+async function createInactiveUserReminderNotifications() {
+  const [userRows] = await pool.query(
+    `SELECT
+      id AS userId,
+      public_id AS publicId,
+      mobile_number AS mobileNumber,
+      full_name AS fullName,
+      last_login_at AS lastLoginAt
+    FROM users
+    WHERE status = 'active'
+      AND mobile_number IS NOT NULL
+      AND (
+        last_login_at IS NULL
+        OR last_login_at <= DATE_SUB(NOW(), INTERVAL 30 DAY)
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM notifications n
+        WHERE n.user_id = users.id
+          AND n.notification_key = 'inactive_user_reminder:30_days'
+      )`
+  );
+
+  const notifications = [];
+
+  for (const user of userRows) {
+    const notification = await createNotification(user.userId, {
+      type: "inactive_user_reminder",
+      title: "Check your credit data",
+      message: "It has been a while since your last login. Login to ScoreCare to check your latest credit data.",
+      notificationKey: "inactive_user_reminder:30_days",
+      data: {
+        lastLoginAt: user.lastLoginAt
+      }
+    });
+
+    notifications.push({
+      user,
+      notification
+    });
+  }
+
+  return notifications;
 }
 
 async function findNotificationByIdForUserPublicId(id, userPublicId) {
@@ -530,9 +636,12 @@ module.exports = {
   createCreditRepairDocumentsUploadedNotification,
   createFeedbackSubmittedNotification,
   createFreeTierCreatedNotification,
+  createFirstTimeUserWelcomeNotification,
+  createInactiveUserReminderNotifications,
   createLoanAppliedNotification,
   createLoanStatusUpdatedNotification,
   createMonthlyCibilReportNotifications,
+  createSubscriptionRenewalReminderNotifications,
   createNotification,
   disableFcmTokens,
   listNotificationsByUserPublicId,
