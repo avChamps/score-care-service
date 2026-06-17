@@ -3,6 +3,9 @@ const {
   sendWhatsAppSafely,
   sendWhatsAppUserMessage
 } = require("./whatsapp.service");
+const {
+  shouldSendUserWhatsappAlert
+} = require("../models/user.model");
 
 function valueOrFallback(value, fallback = "Not available") {
   return value === undefined || value === null || value === "" ? fallback : value;
@@ -184,40 +187,53 @@ const templates = {
   }
 };
 
+async function sendUserWhatsappAlert(user, message) {
+  const userId = user?.internalId || user?.userId;
+
+  if (userId && !await shouldSendUserWhatsappAlert(userId)) {
+    return {
+      status: "skipped",
+      reason: "User disabled WhatsApp alerts"
+    };
+  }
+
+  return sendWhatsAppUserMessage(user, message);
+}
+
 async function sendFeedbackReceivedWhatsapp(user) {
-  return sendWhatsAppUserMessage(user, templates.feedbackReceived(user));
+  return sendUserWhatsappAlert(user, templates.feedbackReceived(user));
 }
 
 async function sendFirstTimeWelcomeWhatsapp(user) {
-  return sendWhatsAppUserMessage(user, templates.firstTimeWelcome(user));
+  return sendUserWhatsappAlert(user, templates.firstTimeWelcome(user));
 }
 
 async function sendEmiDueReminderWhatsapp(user, emi) {
-  return sendWhatsAppUserMessage(user, templates.emiDueReminder(user, emi));
+  return sendUserWhatsappAlert(user, templates.emiDueReminder(user, emi));
 }
 
 async function sendPaymentReminderWhatsapp(user, payment) {
-  return sendWhatsAppUserMessage(user, templates.paymentReminder(user, payment));
+  return sendUserWhatsappAlert(user, templates.paymentReminder(user, payment));
 }
 
 async function sendSubscriptionPaymentSuccessWhatsapp(user, payment) {
-  return sendWhatsAppUserMessage(user, templates.subscriptionPaymentSuccess(user, payment));
+  return sendUserWhatsappAlert(user, templates.subscriptionPaymentSuccess(user, payment));
 }
 
 async function sendSubscriptionRenewalWhatsapp(user, notification) {
-  return sendWhatsAppUserMessage(user, templates.subscriptionRenewal(user, notification));
+  return sendUserWhatsappAlert(user, templates.subscriptionRenewal(user, notification));
 }
 
 async function sendInactiveUserWhatsapp(user) {
-  return sendWhatsAppUserMessage(user, templates.inactiveUser(user));
+  return sendUserWhatsappAlert(user, templates.inactiveUser(user));
 }
 
 async function sendDisputeStatusWhatsapp(user, request) {
-  return sendWhatsAppUserMessage(user, templates.disputeStatus(user, request));
+  return sendUserWhatsappAlert(user, templates.disputeStatus(user, request));
 }
 
 async function sendCreditImprovedWhatsapp(user, request) {
-  return sendWhatsAppUserMessage(user, templates.creditImproved(user, request));
+  return sendUserWhatsappAlert(user, templates.creditImproved(user, request));
 }
 
 async function sendSupportAdminWhatsapp(alert) {
@@ -235,6 +251,7 @@ module.exports = {
   sendSubscriptionPaymentSuccessWhatsapp,
   sendSubscriptionRenewalWhatsapp,
   sendSupportAdminWhatsapp,
+  shouldSendUserWhatsappAlert,
   sendWhatsAppSafely,
   templates
 };

@@ -2,9 +2,11 @@ const {
   createLoginEvent,
   findUserById,
   findUserByPublicId,
+  getUserNotificationPreferences,
   hasWelcomeEmailBeenSent,
   listLoginEventsByUserId,
   markWelcomeEmailSent,
+  updateUserNotificationPreferences,
   updateUserSelectedLanguage,
   updateUserProfile,
   upsertUserForLogin
@@ -292,6 +294,62 @@ async function getMyProfile(req, res, next) {
   }
 }
 
+function validateNotificationPreferencesPayload(body) {
+  const errors = [];
+
+  if (typeof body.whatsappAlertsEnabled !== "boolean") {
+    errors.push("whatsappAlertsEnabled must be a boolean");
+  }
+
+  return {
+    errors,
+    value: {
+      whatsappAlertsEnabled: body.whatsappAlertsEnabled
+    }
+  };
+}
+
+async function getMyNotificationPreferences(req, res, next) {
+  try {
+    const preferences = await getUserNotificationPreferences(
+      getAuthInternalUserId(req)
+    );
+
+    return res.status(200).json({
+      success: true,
+      data: preferences
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function updateMyNotificationPreferences(req, res, next) {
+  try {
+    const { errors, value } = validateNotificationPreferencesPayload(req.body);
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        success: false,
+        errors
+      });
+    }
+
+    const preferences = await updateUserNotificationPreferences(
+      getAuthInternalUserId(req),
+      value
+    );
+
+    return res.status(200).json({
+      success: true,
+      message: "Notification preferences updated successfully",
+      data: preferences
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function getUserLoginEvents(req, res, next) {
   try {
     const user = await findUserByPublicId(req.params.userId) ||
@@ -322,9 +380,11 @@ async function getUserLoginEvents(req, res, next) {
 }
 
 module.exports = {
+  getMyNotificationPreferences,
   getMyProfile,
   getUserLoginEvents,
   recordUserLogin,
+  updateMyNotificationPreferences,
   updateMySelectedLanguage,
   updateMyProfile
 };

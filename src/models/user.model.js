@@ -15,6 +15,9 @@ function mapUser(row) {
     email: row.email,
     dateOfBirth: row.dateOfBirth,
     selectedLanguage: row.selectedLanguage || "English",
+    whatsappAlertsEnabled: row.whatsappAlertsEnabled === undefined
+      ? true
+      : Boolean(row.whatsappAlertsEnabled),
     isAdmin: Boolean(row.isAdmin),
     accessType: row.accessType,
     subscriptionStatus: row.subscriptionStatus,
@@ -46,6 +49,7 @@ async function findUserById(id) {
       email,
       date_of_birth AS dateOfBirth,
       selected_language AS selectedLanguage,
+      whatsapp_alerts_enabled AS whatsappAlertsEnabled,
       is_admin AS isAdmin,
       CASE
         WHEN subscription_status IN ('active', 'cancelled')
@@ -80,6 +84,7 @@ async function findUserByPublicId(publicId) {
       email,
       date_of_birth AS dateOfBirth,
       selected_language AS selectedLanguage,
+      whatsapp_alerts_enabled AS whatsappAlertsEnabled,
       is_admin AS isAdmin,
       CASE
         WHEN subscription_status IN ('active', 'cancelled')
@@ -214,6 +219,55 @@ async function updateUserSelectedLanguage(userId, selectedLanguage) {
   return findUserById(userId);
 }
 
+async function getUserNotificationPreferences(userId) {
+  try {
+    const [rows] = await pool.query(
+      `SELECT whatsapp_alerts_enabled AS whatsappAlertsEnabled
+      FROM users
+      WHERE id = ?`,
+      [userId]
+    );
+
+    return {
+      whatsappAlertsEnabled: rows[0]?.whatsappAlertsEnabled === undefined ||
+        rows[0]?.whatsappAlertsEnabled === null
+        ? true
+        : Boolean(rows[0].whatsappAlertsEnabled)
+    };
+  } catch (error) {
+    if (error.code === "ER_BAD_FIELD_ERROR") {
+      return {
+        whatsappAlertsEnabled: true
+      };
+    }
+
+    throw error;
+  }
+}
+
+async function updateUserNotificationPreferences(userId, preferences) {
+  const [result] = await pool.query(
+    `UPDATE users
+    SET
+      whatsapp_alerts_enabled = ?,
+      updated_at = NOW()
+    WHERE id = ?`,
+    [preferences.whatsappAlertsEnabled ? 1 : 0, userId]
+  );
+
+  if (result.affectedRows === 0) {
+    return null;
+  }
+
+  return getUserNotificationPreferences(userId);
+}
+
+async function shouldSendUserWhatsappAlert(userId) {
+  const preferences = await getUserNotificationPreferences(userId);
+
+  return preferences.whatsappAlertsEnabled;
+}
+
 async function hasWelcomeEmailBeenSent(userId) {
   try {
     const [rows] = await pool.query(
@@ -333,9 +387,12 @@ module.exports = {
   createLoginEvent,
   findUserById,
   findUserByPublicId,
+  getUserNotificationPreferences,
   hasWelcomeEmailBeenSent,
   listLoginEventsByUserId,
   markWelcomeEmailSent,
+  shouldSendUserWhatsappAlert,
+  updateUserNotificationPreferences,
   updateUserSelectedLanguage,
   updateUserProfile,
   upsertUserForOtpLogin,

@@ -68,6 +68,7 @@ app.use("/notifications", notificationRoutes);
 app.use("/api/notifications", notificationRoutes);
 app.use("/subscription-plans", subscriptionPlanRoutes);
 app.use("/users", userRoutes);
+app.use("/api/users", userRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
