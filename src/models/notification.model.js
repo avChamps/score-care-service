@@ -374,12 +374,26 @@ async function createCibilRepairRequestUpdatedNotification(userId, request) {
 
 async function createMonthlyCibilReportNotifications(monthKey) {
   const [userRows] = await pool.query(
-    `SELECT DISTINCT cr.user_id AS userId
+    `SELECT DISTINCT
+      cr.user_id AS userId,
+      u.public_id AS publicId,
+      u.full_name AS fullName,
+      u.email,
+      cr.credit_score AS creditScore
     FROM credit_reports cr
     INNER JOIN users u ON u.id = cr.user_id
     WHERE cr.provider = 'surepass'
       AND cr.report_type = 'cibil_pdf'
-      AND u.status = 'active'`
+      AND u.status = 'active'
+      AND u.subscription_status = 'active'
+      AND (u.subscription_due_at IS NULL OR u.subscription_due_at >= NOW())
+      AND NOT EXISTS (
+        SELECT 1
+        FROM notifications n
+        WHERE n.notification_key = CONCAT('cibil_report_updated:', ?, ':', cr.user_id)
+        LIMIT 1
+      )`,
+    [monthKey]
   );
   const [result] = await pool.query(
     `INSERT INTO notifications (
@@ -409,6 +423,8 @@ async function createMonthlyCibilReportNotifications(monthKey) {
     WHERE cr.provider = 'surepass'
       AND cr.report_type = 'cibil_pdf'
       AND u.status = 'active'
+      AND u.subscription_status = 'active'
+      AND (u.subscription_due_at IS NULL OR u.subscription_due_at >= NOW())
     ON DUPLICATE KEY UPDATE
       updated_at = updated_at`,
     [monthKey, monthKey]
@@ -416,7 +432,8 @@ async function createMonthlyCibilReportNotifications(monthKey) {
 
   return {
     affectedRows: result.affectedRows,
-    userIds: userRows.map((row) => row.userId)
+    userIds: userRows.map((row) => row.userId),
+    users: userRows
   };
 }
 

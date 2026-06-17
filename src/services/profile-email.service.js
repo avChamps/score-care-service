@@ -28,8 +28,26 @@ function escapeHtml(value) {
     .replace(/'/g, "&#039;");
 }
 
-function buildWelcomeEmail(user) {
+function buildScoreCareEmail(user, content) {
   const fullName = escapeHtml(user.fullName || "there");
+  const title = escapeHtml(content.title);
+  const heroTitle = escapeHtml(content.heroTitle);
+  const heroSubtitle = escapeHtml(content.heroSubtitle);
+  const scoreValue = escapeHtml(content.scoreValue || "800+");
+  const scoreLabel = escapeHtml(content.scoreLabel || "Target");
+  const sectionTitle = escapeHtml(content.sectionTitle);
+  const primaryCtaLabel = escapeHtml(content.primaryCtaLabel || "Check my score now");
+  const secondaryCtaLabel = escapeHtml(content.secondaryCtaLabel || "View my report");
+  const featuresHtml = content.features.map((feature) => `
+<!-- FEATURE -->
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f7fafc;border:1px solid #e2ecf0;border-collapse:collapse;margin-bottom:10px;">
+<tr>
+<td valign="top" style="padding:13px 14px 13px 10px;">
+  <div style="font-size:13px;line-height:18px;font-weight:700;color:#1B3A5C;">${escapeHtml(feature.title)}</div>
+  <div style="font-size:12px;line-height:19px;color:#64748b;margin-top:3px;">${escapeHtml(feature.description)}</div>
+</td>
+</tr>
+</table>`).join("");
 
   return `
 <!doctype html>
@@ -38,7 +56,7 @@ function buildWelcomeEmail(user) {
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="x-apple-disable-message-reformatting">
-  <title>Welcome to ScoreCare</title>
+  <title>${title}</title>
 
   <style>
     @media only screen and (max-width: 620px) {
@@ -104,15 +122,15 @@ function buildWelcomeEmail(user) {
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-collapse:collapse;">
       <tr>
         <td class="hero-title-col" width="75%" valign="middle" style="width:75%;vertical-align:middle;">
-          <div style="font-size:20px;line-height:26px;font-weight:700;color:#1B3A5C;">Welcome to ScoreCare!</div>
-          <div style="font-size:13px;line-height:20px;color:#1f9c80;margin-top:4px;">Your credit journey starts now</div>
+          <div style="font-size:20px;line-height:26px;font-weight:700;color:#1B3A5C;">${heroTitle}</div>
+          <div style="font-size:13px;line-height:20px;color:#1f9c80;margin-top:4px;">${heroSubtitle}</div>
         </td>
 
         <td class="hero-score-col" width="25%" align="right" valign="middle" style="width:25%;text-align:right;vertical-align:middle;">
           <div class="score-badge" style="display:inline-block;width:76px;height:76px;min-width:76px;max-width:76px;min-height:76px;max-height:76px;background-color:#ffffff;border:3px solid #2EC4A0;border-radius:999px;text-align:center;overflow:hidden;box-sizing:border-box;">
             <div style="height:16px;line-height:16px;font-size:1px;">&nbsp;</div>
-            <div class="score-num" style="font-size:22px;line-height:24px;font-weight:700;color:#1B3A5C;text-align:center;">800+</div>
-            <div class="score-label" style="font-size:9px;line-height:12px;font-weight:700;color:#2EC4A0;text-transform:uppercase;letter-spacing:.5px;text-align:center;">Target</div>
+            <div class="score-num" style="font-size:22px;line-height:24px;font-weight:700;color:#1B3A5C;text-align:center;">${scoreValue}</div>
+            <div class="score-label" style="font-size:9px;line-height:12px;font-weight:700;color:#2EC4A0;text-transform:uppercase;letter-spacing:.5px;text-align:center;">${scoreLabel}</div>
           </div>
         </td>
       </tr>
@@ -129,11 +147,11 @@ function buildWelcomeEmail(user) {
 </p>
 
 <p style="margin:0 0 12px;font-size:14px;line-height:24px;color:#4a5568;">
-  Thank you for registering with <strong style="color:#1B3A5C;">ScoreCare</strong>. Your account is now active and you have instant access to your credit score, detailed credit report, and personalised improvement plan - completely free.
+  ${content.primaryContentHtml}
 </p>
 
 <p style="margin:0 0 22px;font-size:14px;line-height:24px;color:#4a5568;">
-  We are an authorised credit information service provider integrated with <strong style="color:#1B3A5C;">Experian and CRIF High Mark</strong> - giving you accurate, real-time insights into your credit health in one place.
+  ${content.secondaryContentHtml}
 </p>
 
 <!-- CREDIT SCORE RANGES -->
@@ -174,72 +192,22 @@ function buildWelcomeEmail(user) {
 </table>
 
 <p style="margin:0 0 12px;font-size:13px;line-height:20px;font-weight:700;color:#1B3A5C;">
-  What you get with ScoreCare:
+  ${sectionTitle}
 </p>
 
-<!-- FEATURE 1 -->
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f7fafc;border:1px solid #e2ecf0;border-collapse:collapse;margin-bottom:10px;">
-<tr>
-<!-- <td width="52" valign="top" style="width:52px;padding:14px 0 14px 14px;">
-  <span style="display:inline-block;background-color:#e0f5ef;color:#1B3A5C;font-size:11px;font-weight:700;line-height:34px;text-align:center;width:34px;height:34px;border-radius:8px;">REF</span>
-</td> -->
-<td valign="top" style="padding:13px 14px 13px 10px;">
-  <div style="font-size:13px;line-height:18px;font-weight:700;color:#1B3A5C;">Monthly credit score refresh</div>
-  <div style="font-size:12px;line-height:19px;color:#64748b;margin-top:3px;">Updated score from CIBIL &amp; Experian every 30 days, with instant change alerts sent to your email and phone.</div>
-</td>
-</tr>
-</table>
-
-<!-- FEATURE 2 -->
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f7fafc;border:1px solid #e2ecf0;border-collapse:collapse;margin-bottom:10px;">
-<tr>
-<!-- <td width="52" valign="top" style="width:52px;padding:14px 0 14px 14px;">
-  <span style="display:inline-block;background-color:#e0f5ef;color:#1B3A5C;font-size:11px;font-weight:700;line-height:34px;text-align:center;width:34px;height:34px;border-radius:8px;">REP</span>
-</td> -->
-<td valign="top" style="padding:13px 14px 13px 10px;">
-  <div style="font-size:13px;line-height:18px;font-weight:700;color:#1B3A5C;">Full credit report analysis</div>
-  <div style="font-size:12px;line-height:19px;color:#64748b;margin-top:3px;">Account-by-account breakdown of your credit history, active EMIs, closed accounts, and hard enquiries.</div>
-</td>
-</tr>
-</table>
-
-<!-- FEATURE 3 -->
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f7fafc;border:1px solid #e2ecf0;border-collapse:collapse;margin-bottom:10px;">
-<tr>
-<!-- <td width="52" valign="top" style="width:52px;padding:14px 0 14px 14px;">
-  <span style="display:inline-block;background-color:#e0f5ef;color:#1B3A5C;font-size:11px;font-weight:700;line-height:34px;text-align:center;width:34px;height:34px;border-radius:8px;">AI</span>
-</td> -->
-<td valign="top" style="padding:13px 14px 13px 10px;">
-  <div style="font-size:13px;line-height:18px;font-weight:700;color:#1B3A5C;">AI-powered improvement tips</div>
-  <div style="font-size:12px;line-height:19px;color:#64748b;margin-top:3px;">Personalised, step-by-step recommendations to help you reach 800+ and unlock better loan &amp; credit card offers.</div>
-</td>
-</tr>
-</table>
-
-<!-- FEATURE 4 -->
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f7fafc;border:1px solid #e2ecf0;border-collapse:collapse;margin-bottom:18px;">
-<tr>
-<!-- <td width="52" valign="top" style="width:52px;padding:14px 0 14px 14px;">
-  <span style="display:inline-block;background-color:#e0f5ef;color:#1B3A5C;font-size:11px;font-weight:700;line-height:34px;text-align:center;width:34px;height:34px;border-radius:8px;">SEC</span>
-</td> -->
-<td valign="top" style="padding:13px 14px 13px 10px;">
-  <div style="font-size:13px;line-height:18px;font-weight:700;color:#1B3A5C;">Fraud &amp; identity alerts</div>
-  <div style="font-size:12px;line-height:19px;color:#64748b;margin-top:3px;">Instant notification if any new enquiry or account appears on your credit report without your knowledge.</div>
-</td>
-</tr>
-</table>
+${featuresHtml}
 
 <!-- BUTTONS -->
 <table role="presentation" class="button-table" align="center" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:18px auto 24px;border-collapse:collapse;">
 <tr>
 <td class="button-cell" width="50%" style="padding:0 5px 0 0;">
   <a class="button-link" href="https://www.scorecareapp.com/dashboard" style="display:block;background-color:#2EC4A0;color:#ffffff;font-size:14px;line-height:18px;font-weight:700;text-decoration:none;padding:13px 10px;text-align:center;border-radius:6px;">
-    Check my score now
+    ${primaryCtaLabel}
   </a>
 </td>
 <td class="button-cell" width="50%" style="padding:0 0 0 5px;">
   <a class="button-link" href="https://www.scorecareapp.com/report" style="display:block;background-color:#ffffff;color:#1B3A5C;font-size:14px;line-height:18px;font-weight:700;text-decoration:none;padding:12px 10px;border:1px solid #1B3A5C;text-align:center;border-radius:6px;">
-    View my report
+    ${secondaryCtaLabel}
   </a>
 </td>
 </tr>
@@ -308,7 +276,73 @@ function buildWelcomeEmail(user) {
   `
 }
 
-async function sendWelcomeEmail(user) {
+function buildWelcomeEmail(user) {
+  return buildScoreCareEmail(user, {
+    title: "Welcome to ScoreCare",
+    heroTitle: "Welcome to ScoreCare!",
+    heroSubtitle: "Your credit journey starts now",
+    scoreValue: "800+",
+    scoreLabel: "Target",
+    primaryContentHtml: 'Thank you for registering with <strong style="color:#1B3A5C;">ScoreCare</strong>. Your account is now active and you have instant access to your credit score, detailed credit report, and personalised improvement plan - completely free.',
+    secondaryContentHtml: 'We are an authorised credit information service provider integrated with <strong style="color:#1B3A5C;">Experian and CRIF High Mark</strong> - giving you accurate, real-time insights into your credit health in one place.',
+    sectionTitle: "What you get with ScoreCare:",
+    primaryCtaLabel: "Check my score now",
+    secondaryCtaLabel: "View my report",
+    features: [
+      {
+        title: "Monthly credit score refresh",
+        description: "Updated score from CIBIL & Experian every 30 days, with instant change alerts sent to your email and phone."
+      },
+      {
+        title: "Full credit report analysis",
+        description: "Account-by-account breakdown of your credit history, active EMIs, closed accounts, and hard enquiries."
+      },
+      {
+        title: "AI-powered improvement tips",
+        description: "Personalised, step-by-step recommendations to help you reach 800+ and unlock better loan & credit card offers."
+      },
+      {
+        title: "Fraud & identity alerts",
+        description: "Instant notification if any new enquiry or account appears on your credit report without your knowledge."
+      }
+    ]
+  });
+}
+
+function buildMonthlyScoreChangedEmail(user, report = {}) {
+  return buildScoreCareEmail(user, {
+    title: "Your ScoreCare monthly score update is ready",
+    heroTitle: "Your monthly score update is ready",
+    heroSubtitle: "Included with your ScoreCare subscription",
+    scoreValue: report.creditScore || "New",
+    scoreLabel: report.creditScore ? "Score" : "Update",
+    primaryContentHtml: 'Your <strong style="color:#1B3A5C;">ScoreCare subscription</strong> includes monthly credit score tracking. Your latest monthly credit score update is now available in your dashboard.',
+    secondaryContentHtml: 'Review your updated credit report, check what changed, and follow your personalised improvement plan to keep moving toward a stronger credit profile.',
+    sectionTitle: "What to review this month:",
+    primaryCtaLabel: "Check updated score",
+    secondaryCtaLabel: "View full report",
+    features: [
+      {
+        title: "Latest credit score update",
+        description: "See your latest saved CIBIL score and compare it with your previous credit activity."
+      },
+      {
+        title: "Credit report review",
+        description: "Check open accounts, active EMIs, closed accounts, and recent hard enquiries in one place."
+      },
+      {
+        title: "Personalised improvement plan",
+        description: "Use your ScoreCare recommendations to understand what actions can improve your score over time."
+      },
+      {
+        title: "Fraud and identity alerts",
+        description: "Review new enquiries or accounts early so you can act quickly if anything looks unfamiliar."
+      }
+    ]
+  });
+}
+
+async function sendScoreCareTemplateEmail(user, subject, text, html) {
   if (!user.email) {
     return {
       status: "skipped",
@@ -325,7 +359,6 @@ async function sendWelcomeEmail(user) {
 
   try {
     const transporter = createTransporter();
-    const body = buildWelcomeEmail(user);
     const recipients =
       env.nodeEnv === "production" || env.smtp.testRecipients.length === 0
         ? [user.email]
@@ -334,24 +367,9 @@ async function sendWelcomeEmail(user) {
     await transporter.sendMail({
       from: `"${env.smtp.fromName}" <${env.smtp.user}>`,
       to: recipients,
-      subject: "Welcome to ScoreCare",
-      text: [
-        `Dear ${user.fullName || "there"},`,
-        "",
-        "Welcome to ScoreCare. Your account is now active.",
-        "You can now access your credit score, detailed credit report, and personalised improvement plan.",
-        "",
-        "ScoreCare gives you monthly score refreshes, report analysis, improvement tips, and fraud alerts.",
-        "",
-        "Check your score: https://www.scorecareapp.com/dashboard",
-        "View your report: https://www.scorecareapp.com/report",
-        "",
-        "Need help? Contact support@scorecareapp.com",
-        "",
-        "Warm regards,",
-        "Team ScoreCare"
-      ].join("\n"),
-      html: body,
+      subject,
+      text,
+      html,
       attachments: [
         {
           filename: "scorecare-logo.PNG",
@@ -373,6 +391,55 @@ async function sendWelcomeEmail(user) {
   }
 }
 
+async function sendWelcomeEmail(user) {
+  return sendScoreCareTemplateEmail(
+    user,
+    "Welcome to ScoreCare",
+    [
+      `Dear ${user.fullName || "there"},`,
+      "",
+      "Welcome to ScoreCare. Your account is now active.",
+      "You can now access your credit score, detailed credit report, and personalised improvement plan.",
+      "",
+      "ScoreCare gives you monthly score refreshes, report analysis, improvement tips, and fraud alerts.",
+      "",
+      "Check your score: https://www.scorecareapp.com/dashboard",
+      "View your report: https://www.scorecareapp.com/report",
+      "",
+      "Need help? Contact support@scorecareapp.com",
+      "",
+      "Warm regards,",
+      "Team ScoreCare"
+    ].join("\n"),
+    buildWelcomeEmail(user)
+  );
+}
+
+async function sendMonthlyScoreChangedEmail(user, report) {
+  return sendScoreCareTemplateEmail(
+    user,
+    "Your ScoreCare monthly score update is ready",
+    [
+      `Dear ${user.fullName || "there"},`,
+      "",
+      "Your monthly ScoreCare credit score update is ready.",
+      report?.creditScore ? `Latest score: ${report.creditScore}` : "Your latest score is available in your dashboard.",
+      "",
+      "Review your updated credit report, check what changed, and follow your personalised improvement plan.",
+      "",
+      "Check updated score: https://www.scorecareapp.com/dashboard",
+      "View full report: https://www.scorecareapp.com/report",
+      "",
+      "Need help? Contact support@scorecareapp.com",
+      "",
+      "Warm regards,",
+      "Team ScoreCare"
+    ].join("\n"),
+    buildMonthlyScoreChangedEmail(user, report)
+  );
+}
+
 module.exports = {
+  sendMonthlyScoreChangedEmail,
   sendWelcomeEmail
 };

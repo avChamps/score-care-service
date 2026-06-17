@@ -18,6 +18,9 @@ const {
   sendStoredNotificationToUser
 } = require("./mobile-notification.service");
 const {
+  sendMonthlyScoreChangedEmail
+} = require("./profile-email.service");
+const {
   sendEmiDueReminderWhatsapp,
   sendInactiveUserWhatsapp,
   sendSubscriptionRenewalWhatsapp,
@@ -35,16 +38,31 @@ function getCurrentMonthKey(date = new Date()) {
 async function runMonthlyCibilNotificationJob(date = new Date()) {
   const monthKey = getCurrentMonthKey(date);
   const result = await createMonthlyCibilReportNotifications(monthKey);
+  const emailAlerts = [];
 
   if (result.affectedRows) {
     await sendMonthlyCibilReportPush(result.userIds, monthKey);
   }
 
+  for (const user of result.users || []) {
+    const emailAlert = await sendMonthlyScoreChangedEmail(user, {
+      creditScore: user.creditScore,
+      monthKey
+    });
+    emailAlerts.push({
+      userId: user.publicId,
+      emailAlert
+    });
+  }
+
   console.log(
-    `Monthly CIBIL notification job completed for ${monthKey}: ${result.affectedRows} rows affected`
+    `Monthly CIBIL notification job completed for ${monthKey}: ${result.affectedRows} rows affected, ${emailAlerts.length} emails processed`
   );
 
-  return result;
+  return {
+    ...result,
+    emailAlerts
+  };
 }
 
 async function sendReminderNotifications(reminders, sendWhatsapp) {

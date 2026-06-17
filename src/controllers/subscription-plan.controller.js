@@ -10,6 +10,10 @@ const {
   updateSubscriptionPlanByPublicId
 } = require("../models/subscription-plan.model");
 const { findUserById } = require("../models/user.model");
+const { findCibilReportByUserId } = require("../models/credit-report.model");
+const {
+  sendMonthlyScoreChangedEmail
+} = require("../services/profile-email.service");
 const {
   createRazorpayCustomer,
   createRazorpayOrder,
@@ -323,10 +327,20 @@ async function confirmGatewaySubscriptionPayment(req, res, next) {
         source: "checkout_confirm"
       }
     });
+    const [user, report] = await Promise.all([
+      findUserById(req.auth.internalUserId),
+      findCibilReportByUserId(req.auth.internalUserId)
+    ]);
+    const emailAlert = await sendMonthlyScoreChangedEmail(user, {
+      creditScore: report?.creditScore
+    });
 
     return res.status(200).json({
       status: "success",
-      message: "Subscription payment verified successfully"
+      message: "Subscription payment verified successfully",
+      data: {
+        emailAlert
+      }
     });
   } catch (error) {
     next(error);
