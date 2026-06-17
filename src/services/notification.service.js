@@ -14,8 +14,17 @@ const INVALID_TOKEN_ERROR_CODES = new Set([
 const ALLOWED_PUSH_TYPES = new Set([
   "cibil_report_updated",
   "inactive_user_reminder",
+  "loan_applied",
+  "loan_status_updated",
+  "feedback_submitted",
+  "free_tier_created",
+  "first_time_user_welcome",
+  "cibil_repair_request_created",
+  "credit_repair_documents_uploaded",
+  "credit_dispute_submitted",
   "credit_dispute_status_updated",
-  "cibil_repair_request_updated"
+  "cibil_repair_request_updated",
+  "subscription_renewal_reminder"
 ]);
 
 function isAllowedPushPayload(payload = {}) {
