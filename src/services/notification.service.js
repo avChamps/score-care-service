@@ -11,6 +11,21 @@ const INVALID_TOKEN_ERROR_CODES = new Set([
   "messaging/invalid-argument"
 ]);
 
+const ALLOWED_PUSH_TYPES = new Set([
+  "cibil_report_updated",
+  "inactive_user_reminder",
+  "credit_dispute_status_updated",
+  "cibil_repair_request_updated"
+]);
+
+function isAllowedPushPayload(payload = {}) {
+  return isAllowedPushType(payload.data?.type);
+}
+
+function isAllowedPushType(type) {
+  return ALLOWED_PUSH_TYPES.has(type);
+}
+
 function normalizeData(data = {}, screen) {
   return Object.entries({
     ...data,
@@ -105,24 +120,49 @@ async function sendToTokens(tokens, payload) {
 }
 
 async function sendToUser(userId, payload = {}) {
+  if (!isAllowedPushPayload(payload)) {
+    return {
+      successCount: 0,
+      failureCount: 0,
+      disabledCount: 0
+    };
+  }
+
   const tokens = await listActiveFcmTokensByUserIds([userId]);
 
   return sendToTokens(tokens.map((token) => token.fcmToken), payload);
 }
 
 async function sendToMultipleUsers(userIds, payload = {}) {
+  if (!isAllowedPushPayload(payload)) {
+    return {
+      successCount: 0,
+      failureCount: 0,
+      disabledCount: 0
+    };
+  }
+
   const tokens = await listActiveFcmTokensByUserIds(userIds);
 
   return sendToTokens(tokens.map((token) => token.fcmToken), payload);
 }
 
 async function sendToAllUsers(payload = {}) {
+  if (!isAllowedPushPayload(payload)) {
+    return {
+      successCount: 0,
+      failureCount: 0,
+      disabledCount: 0
+    };
+  }
+
   const tokens = await listAllActiveFcmTokens();
 
   return sendToTokens(tokens.map((token) => token.fcmToken), payload);
 }
 
 module.exports = {
+  isAllowedPushType,
   sendToAllUsers,
   sendToMultipleUsers,
   sendToUser

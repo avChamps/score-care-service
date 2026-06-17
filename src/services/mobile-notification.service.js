@@ -1,4 +1,5 @@
 const {
+  isAllowedPushType,
   sendToMultipleUsers,
   sendToUser
 } = require("./notification.service");
@@ -20,6 +21,10 @@ async function sendStoredNotificationToUser(userId, notification) {
     return null;
   }
 
+  if (!isAllowedPushType(notification.type)) {
+    return null;
+  }
+
   try {
     return await sendToUser(userId, buildPayload(notification));
   } catch (error) {
@@ -37,8 +42,8 @@ async function sendMonthlyCibilReportPush(userIds, monthKey) {
 
   try {
     return await sendToMultipleUsers(ids, {
-      title: "CIBIL report updated",
-      body: "Your monthly CIBIL report update is available.",
+      title: "Credit score updated",
+      body: "Your monthly credit score update is available.",
       data: {
         type: "cibil_report_updated",
         month: monthKey

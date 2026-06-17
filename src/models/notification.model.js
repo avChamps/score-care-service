@@ -409,8 +409,8 @@ async function createMonthlyCibilReportNotifications(monthKey) {
       cr.user_id,
       cr.user_public_id,
       'cibil_report_updated',
-      'CIBIL report updated',
-      'Your monthly CIBIL report update is available.',
+      'Credit score updated',
+      'Your monthly credit score update is available.',
       JSON_OBJECT(
         'month', ?,
         'creditScore', cr.credit_score,
