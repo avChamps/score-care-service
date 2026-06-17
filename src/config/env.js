@@ -74,7 +74,11 @@ msg91: {
       : true,
     user: process.env.SMTP_USER || "",
     password: process.env.SMTP_PASSWORD || "",
-    fromName: process.env.SMTP_FROM_NAME || "ScoreCare"
+    fromName: process.env.SMTP_FROM_NAME || "ScoreCare",
+    testRecipients: (process.env.SMTP_TEST_RECIPIENTS || "")
+      .split(",")
+      .map((email) => email.trim())
+      .filter(Boolean)
   },
   surepass: {
     baseUrl: process.env.SUREPASS_BASE_URL || "https://sandbox.surepass.io",
