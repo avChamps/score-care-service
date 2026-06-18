@@ -116,6 +116,21 @@ function toRazorpayAmount(amount) {
   return Math.round(Number(amount || 0)) / 100;
 }
 
+function getSubscriptionAmountBreakup(plan) {
+  const amount = Number(plan.amount || 0);
+  const gstPercentage = Number(plan.gstPercentage || 0);
+  const gstAmount = Number(((amount * gstPercentage) / 100).toFixed(2));
+  const finalAmount = Number((amount + gstAmount).toFixed(2));
+
+  return {
+    amount,
+    gstPercentage,
+    gstAmount,
+    finalAmount,
+    razorpayAmount: Math.round(finalAmount * 100)
+  };
+}
+
 function mapRazorpayPaymentStatus(status) {
   return status === "captured" || status === "authorized" ? "paid" : "failed";
 }
@@ -272,6 +287,7 @@ async function createGatewaySubscription(req, res, next) {
 
     const user = await findUserById(req.auth.internalUserId);
     const prefill = normalizeRazorpayPrefill(user);
+    const amountBreakup = getSubscriptionAmountBreakup(plan);
     const customer = await createRazorpayCustomer({
       name: prefill.name || prefill.contact,
       email: prefill.email || undefined,
@@ -279,13 +295,13 @@ async function createGatewaySubscription(req, res, next) {
     });
 
     const order = await createRazorpayOrder({
-      amount: plan.amount,
+      amount: amountBreakup.finalAmount,
       currency: plan.currency,
       customerId: customer.id,
       method: "upi",
       receipt: `sub_${req.auth.internalUserId}_${Date.now()}`,
       token: {
-        max_amount: Math.round(Number(plan.amount) * 100),
+        max_amount: amountBreakup.razorpayAmount,
         expire_at: Math.floor(Date.now() / 1000) + 30 * 365 * 24 * 60 * 60,
         frequency: "as_presented"
       },
@@ -309,6 +325,7 @@ async function createGatewaySubscription(req, res, next) {
         customerId: customer.id,
         prefill,
         recurring: "1",
+        ...amountBreakup,
         plan,
         order
       }
