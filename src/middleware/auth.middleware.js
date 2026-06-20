@@ -3,8 +3,15 @@ const {
   findUserById,
   findUserByPublicId
 } = require("../models/user.model");
+const {
+  findEmployeeByPublicId
+} = require("../models/employee.model");
 
 async function resolveInternalUserId(auth) {
+  if (auth.tokenType === "employee_access") {
+    return null;
+  }
+
   if (auth.internalUserId) {
     return auth.internalUserId;
   }
@@ -12,6 +19,20 @@ async function resolveInternalUserId(auth) {
   const user = await findUserByPublicId(auth.userId) || await findUserById(auth.userId);
 
   return user?.internalId;
+}
+
+async function resolveInternalEmployeeId(auth) {
+  if (auth.tokenType !== "employee_access") {
+    return null;
+  }
+
+  const employee = await findEmployeeByPublicId(auth.employeeId);
+
+  if (employee?.status !== "active" || employee.deletedAt) {
+    return null;
+  }
+
+  return employee.internalId;
 }
 
 async function requireAuth(req, res, next) {
@@ -27,9 +48,12 @@ async function requireAuth(req, res, next) {
 
   try {
     const auth = verifyAuthToken(token);
-    const internalUserId = await resolveInternalUserId(auth);
+    const [internalUserId, internalEmployeeId] = await Promise.all([
+      resolveInternalUserId(auth),
+      resolveInternalEmployeeId(auth)
+    ]);
 
-    if (!internalUserId) {
+    if (!internalUserId && !internalEmployeeId) {
       return res.status(401).json({
         status: "error",
         message: "Invalid or expired token"
@@ -38,7 +62,8 @@ async function requireAuth(req, res, next) {
 
     req.auth = {
       ...auth,
-      internalUserId
+      internalUserId,
+      internalEmployeeId
     };
 
     return next();
@@ -60,12 +85,16 @@ async function optionalAuth(req, _res, next) {
 
   try {
     const auth = verifyAuthToken(token);
-    const internalUserId = await resolveInternalUserId(auth);
+    const [internalUserId, internalEmployeeId] = await Promise.all([
+      resolveInternalUserId(auth),
+      resolveInternalEmployeeId(auth)
+    ]);
 
-    if (internalUserId) {
+    if (internalUserId || internalEmployeeId) {
       req.auth = {
         ...auth,
-        internalUserId
+        internalUserId,
+        internalEmployeeId
       };
     }
   } catch (_error) {
@@ -76,6 +105,10 @@ async function optionalAuth(req, _res, next) {
 }
 
 async function requireAdmin(req, res, next) {
+  if (req.auth.tokenType === "employee_access" && req.auth.internalEmployeeId) {
+    return next();
+  }
+
   const user = await findUserById(req.auth.internalUserId);
 
   if (!user?.isAdmin) {

@@ -23,6 +23,21 @@ const {
   getAllFeedback
 } = require("../controllers/feedback.controller");
 const {
+  createAdminEmployee,
+  deleteAdminEmployee,
+  getAdminEmployee,
+  getAdminEmployees,
+  updateAdminEmployee
+} = require("../controllers/employee.controller");
+const {
+  createAdminEmployeeRole,
+  deleteAdminEmployeeRole,
+  getAdminEmployeeRole,
+  getAdminEmployeeRoles,
+  getEmployeeMenuAccess,
+  updateAdminEmployeeRole
+} = require("../controllers/employee-role.controller");
+const {
   getAdminContactRequests
 } = require("../controllers/contact.controller");
 const {
@@ -64,6 +79,17 @@ router.get("/feedback", requireAuth, requireAdmin, getAllFeedback);
 router.get("/contact-requests", requireAuth, requireAdmin, getAdminContactRequests);
 router.get("/app-notifications", requireAuth, requireAdmin, getAdminSentAppNotifications);
 router.post("/app-notifications", requireAuth, requireAdmin, sendAdminAppNotification);
+router.get("/employees", requireAuth, requireAdmin, getAdminEmployees);
+router.post("/employees", requireAuth, requireAdmin, createAdminEmployee);
+router.get("/employee-menu-access", requireAuth, requireAdmin, getEmployeeMenuAccess);
+router.get("/employee-roles", requireAuth, requireAdmin, getAdminEmployeeRoles);
+router.post("/employee-roles", requireAuth, requireAdmin, createAdminEmployeeRole);
+router.get("/employee-roles/:publicId", requireAuth, requireAdmin, getAdminEmployeeRole);
+router.patch("/employee-roles/:publicId", requireAuth, requireAdmin, updateAdminEmployeeRole);
+router.delete("/employee-roles/:publicId", requireAuth, requireAdmin, deleteAdminEmployeeRole);
+router.get("/employees/:publicId", requireAuth, requireAdmin, getAdminEmployee);
+router.patch("/employees/:publicId", requireAuth, requireAdmin, updateAdminEmployee);
+router.delete("/employees/:publicId", requireAuth, requireAdmin, deleteAdminEmployee);
 router.get("/faqs", requireAuth, requireAdmin, getAllFaqs);
 router.post("/faqs", requireAuth, requireAdmin, saveFaqs);
 router.get("/general", requireAuth, requireAdmin, getAdminGeneralDetails);

@@ -4,9 +4,15 @@ const {
 } = require("../services/msg91.service");
 const {
   createLoginEvent,
-  findUserByMobileNumber,
   upsertUserForOtpLogin
 } = require("../models/user.model");
+const {
+  findActiveEmployeeByMobileNumber
+} = require("../models/employee.model");
+const {
+  findEmployeeRoleByPublicId,
+  listMenuAccessByEmployeePublicId
+} = require("../models/employee-role.model");
 const { createAuthToken } = require("../services/token.service");
 const {
   sendFirstTimeWelcomeWhatsapp,
@@ -61,12 +67,12 @@ async function sendAdminOtp(req, res, next) {
       });
     }
 
-    const user = await findUserByMobileNumber(mobileNumber);
+    const employee = await findActiveEmployeeByMobileNumber(mobileNumber);
 
-    if (!user?.isAdmin) {
+    if (!employee) {
       return res.status(403).json({
         status: "error",
-        message: "You do not have administrator permissions."
+        message: "You do not have employee access."
       });
     }
 
@@ -158,8 +164,99 @@ async function verifyOtp(req, res, next) {
   }
 }
 
+async function verifyAdminOtp(req, res, next) {
+  try {
+    const mobileNumber = String(req.body.mobileNumber || "").trim();
+    const otp = String(req.body.otp || "").trim();
+
+    if (!mobilePattern.test(mobileNumber)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Valid 10 digit Indian mobile number is required"
+      });
+    }
+
+    if (!otpPattern.test(otp)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Valid OTP is required"
+      });
+    }
+
+    const employee = await findActiveEmployeeByMobileNumber(mobileNumber);
+
+    if (!employee) {
+      return res.status(403).json({
+        status: "error",
+        message: "You do not have employee access."
+      });
+    }
+
+    const otpResponse = await verifyMobileOtp(mobileNumber, otp);
+    const menuAccess = await listMenuAccessByEmployeePublicId(employee.publicId);
+    const token = createAuthToken({
+      employeeId: employee.publicId,
+      mobileNumber,
+      mobileVerified: true,
+      tokenType: "employee_access"
+    });
+
+    return res.status(200).json({
+      status: "success",
+      message: "OTP verified successfully",
+      data: {
+        token,
+        tokenType: "Bearer",
+        mobileNumber,
+        employee,
+        menuAccess,
+        otpProvider: otpResponse
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getUserPermission(req, res, next) {
+  try {
+    if (req.auth.tokenType !== "employee_access") {
+      return res.status(403).json({
+        status: "error",
+        message: "Employee access is required"
+      });
+    }
+
+    const employee = await findActiveEmployeeByMobileNumber(req.auth.mobileNumber);
+
+    if (!employee) {
+      return res.status(404).json({
+        status: "error",
+        message: "Employee not found"
+      });
+    }
+
+    const role = employee.rolePublicId
+      ? await findEmployeeRoleByPublicId(employee.rolePublicId)
+      : null;
+
+    return res.status(200).json({
+      status: "success",
+      data: {
+        employee,
+        role,
+        menuAccess: role?.menuAccess || []
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
+  getUserPermission,
   sendAdminOtp,
   sendOtp,
+  verifyAdminOtp,
   verifyOtp
 };
