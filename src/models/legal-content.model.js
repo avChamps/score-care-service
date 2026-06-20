@@ -2,9 +2,11 @@ const { pool } = require("../config/db");
 
 function mapLegalContent(row) {
   return {
+    id: row?.id,
     termsAndConditions: row?.termsAndConditions || "",
     privacyPolicy: row?.privacyPolicy || "",
     consent: row?.consent || "",
+    createdAt: row?.createdAt,
     updatedAt: row?.updatedAt
   };
 }
@@ -12,9 +14,11 @@ function mapLegalContent(row) {
 async function getLegalContent() {
   const [rows] = await pool.query(
     `SELECT
+      id,
       terms_and_conditions AS termsAndConditions,
       privacy_policy AS privacyPolicy,
       consent,
+      created_at AS createdAt,
       updated_at AS updatedAt
     FROM legal_contents
     WHERE id = 1`

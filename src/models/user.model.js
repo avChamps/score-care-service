@@ -108,6 +108,41 @@ async function findUserByPublicId(publicId) {
   return mapUser(rows[0]);
 }
 
+async function findUserByMobileNumber(mobileNumber) {
+  const [rows] = await pool.query(
+    `SELECT
+      id AS internalId,
+      public_id AS publicId,
+      mobile_number AS mobileNumber,
+      pan_number AS panNumber,
+      full_name AS fullName,
+      email,
+      date_of_birth AS dateOfBirth,
+      selected_language AS selectedLanguage,
+      whatsapp_alerts_enabled AS whatsappAlertsEnabled,
+      is_admin AS isAdmin,
+      CASE
+        WHEN subscription_status IN ('active', 'cancelled')
+          AND (subscription_due_at IS NULL OR subscription_due_at >= NOW())
+        THEN 'paid'
+        ELSE 'free'
+      END AS accessType,
+      subscription_status AS subscriptionStatus,
+      subscription_started_at AS subscriptionStartedAt,
+      subscription_due_at AS subscriptionDueAt,
+      subscription_ends_at AS subscriptionEndsAt,
+      status,
+      last_login_at AS lastLoginAt,
+      created_at AS createdAt,
+      updated_at AS updatedAt
+    FROM users
+    WHERE mobile_number = ?`,
+    [mobileNumber]
+  );
+
+  return mapUser(rows[0]);
+}
+
 async function upsertUserForLogin(user) {
   const normalizedPan = user.panNumber.toUpperCase();
 
@@ -386,6 +421,7 @@ async function listLoginEventsByUserId(userId, limit = 20) {
 module.exports = {
   createLoginEvent,
   findUserById,
+  findUserByMobileNumber,
   findUserByPublicId,
   getUserNotificationPreferences,
   hasWelcomeEmailBeenSent,

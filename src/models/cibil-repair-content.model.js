@@ -169,8 +169,160 @@ async function replaceCibilRepairContent({ plans, timelines }) {
   }
 }
 
+async function patchCibilRepairContent({ plans = [], timelines = [] }) {
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    for (const plan of plans) {
+      const canRenamePlan =
+        plan.publicId || plan.currentPlanName || plan.currentDisplayOrder !== undefined;
+      const entries = Object.entries({
+        plan_name: canRenamePlan ? plan.planName : undefined,
+        amount: plan.amount,
+        currency: plan.currency,
+        gst_percentage: plan.gstPercentage,
+        offer_tag: plan.offerTag,
+        button_label: plan.buttonLabel,
+        display_order: plan.displayOrder,
+        is_active: plan.isActive
+      }).filter(([, value]) => value !== undefined);
+
+      if (entries.length === 0) {
+        continue;
+      }
+
+      const whereClause = plan.publicId
+        ? "public_id = ?"
+        : plan.currentPlanName
+          ? "plan_name = ?"
+          : plan.currentDisplayOrder !== undefined
+            ? "display_order = ?"
+            : "plan_name = ?";
+      const whereValue = plan.publicId
+        || plan.currentPlanName
+        || (plan.currentDisplayOrder !== undefined
+          ? plan.currentDisplayOrder
+          : plan.planName);
+      const setClause = entries.map(([column]) => `${column} = ?`).join(", ");
+
+      await connection.query(
+        `UPDATE cibil_repair_plans
+        SET ${setClause},
+          updated_at = NOW()
+        WHERE ${whereClause}`,
+        [...entries.map(([, value]) => value), whereValue]
+      );
+    }
+
+    for (const timeline of timelines) {
+      const entries = Object.entries({
+        title: timeline.title,
+        description: timeline.description,
+        display_order: timeline.displayOrder,
+        is_active: timeline.isActive
+      }).filter(([, value]) => value !== undefined);
+
+      if (entries.length === 0) {
+        continue;
+      }
+
+      const whereClause = timeline.publicId ? "public_id = ?" : "display_order = ?";
+      const whereValue = timeline.publicId || timeline.currentDisplayOrder;
+      const setClause = entries.map(([column]) => `${column} = ?`).join(", ");
+
+      await connection.query(
+        `UPDATE cibil_repair_timelines
+        SET ${setClause},
+          updated_at = NOW()
+        WHERE ${whereClause}`,
+        [...entries.map(([, value]) => value), whereValue]
+      );
+    }
+
+    await connection.commit();
+
+    return listAllCibilRepairContent();
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
+async function createCibilRepairTimeline(timeline) {
+  const publicId = timeline.publicId || randomUUID();
+
+  await pool.query(
+    `INSERT INTO cibil_repair_timelines (
+      public_id,
+      title,
+      description,
+      display_order,
+      is_active
+    )
+    VALUES (?, ?, ?, ?, ?)`,
+    [
+      publicId,
+      timeline.title,
+      timeline.description,
+      timeline.displayOrder,
+      timeline.isActive
+    ]
+  );
+
+  return listAllCibilRepairContent();
+}
+
+async function updateCibilRepairTimeline(publicId, timeline) {
+  const entries = Object.entries({
+    title: timeline.title,
+    description: timeline.description,
+    display_order: timeline.displayOrder,
+    is_active: timeline.isActive
+  }).filter(([, value]) => value !== undefined);
+
+  if (entries.length === 0) {
+    return listAllCibilRepairContent();
+  }
+
+  const setClause = entries.map(([column]) => `${column} = ?`).join(", ");
+  const [result] = await pool.query(
+    `UPDATE cibil_repair_timelines
+    SET ${setClause},
+      updated_at = NOW()
+    WHERE public_id = ?`,
+    [...entries.map(([, value]) => value), publicId]
+  );
+
+  if (result.affectedRows === 0) {
+    return null;
+  }
+
+  return listAllCibilRepairContent();
+}
+
+async function deleteCibilRepairTimeline(publicId) {
+  const [result] = await pool.query(
+    "DELETE FROM cibil_repair_timelines WHERE public_id = ?",
+    [publicId]
+  );
+
+  if (result.affectedRows === 0) {
+    return null;
+  }
+
+  return listAllCibilRepairContent();
+}
+
 module.exports = {
+  createCibilRepairTimeline,
+  deleteCibilRepairTimeline,
   listActiveCibilRepairContent,
   listAllCibilRepairContent,
-  replaceCibilRepairContent
+  patchCibilRepairContent,
+  replaceCibilRepairContent,
+  updateCibilRepairTimeline
 };

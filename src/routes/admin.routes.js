@@ -23,6 +23,9 @@ const {
   getAllFeedback
 } = require("../controllers/feedback.controller");
 const {
+  getAdminContactRequests
+} = require("../controllers/contact.controller");
+const {
   getAdminGeneralDetails,
   saveAdminGeneralDetails
 } = require("../controllers/general.controller");
@@ -31,8 +34,11 @@ const {
   saveAdminLegalContentDetails
 } = require("../controllers/legal-content.controller");
 const {
+  createAdminCibilRepairTimeline,
+  deleteAdminCibilRepairTimeline,
   getAdminCibilRepairContent,
   getAdminCibilRepairRequests,
+  updateAdminCibilRepairTimeline,
   updateAdminCibilRepairRequest,
   saveAdminCibilRepairContent
 } = require("../controllers/cibil-repair-content.controller");
@@ -51,6 +57,7 @@ router.get("/dashboard-counts", requireAuth, requireAdmin, getAdminDashboardCoun
 router.get("/subscription-plans", requireAuth, requireAdmin, getAllSubscriptionPlans);
 router.post("/subscription-plans", requireAuth, requireAdmin, createPlan);
 router.get("/feedback", requireAuth, requireAdmin, getAllFeedback);
+router.get("/contact-requests", requireAuth, requireAdmin, getAdminContactRequests);
 router.get("/faqs", requireAuth, requireAdmin, getAllFaqs);
 router.post("/faqs", requireAuth, requireAdmin, saveFaqs);
 router.get("/general", requireAuth, requireAdmin, getAdminGeneralDetails);
@@ -62,6 +69,9 @@ router.patch("/legal-content", requireAuth, requireAdmin, saveAdminLegalContentD
 router.get("/cibil-repair-content", requireAuth, requireAdmin, getAdminCibilRepairContent);
 router.post("/cibil-repair-content", requireAuth, requireAdmin, saveAdminCibilRepairContent);
 router.patch("/cibil-repair-content", requireAuth, requireAdmin, saveAdminCibilRepairContent);
+router.post("/cibil-repair-content/timelines", requireAuth, requireAdmin, createAdminCibilRepairTimeline);
+router.patch("/cibil-repair-content/timelines/:publicId", requireAuth, requireAdmin, updateAdminCibilRepairTimeline);
+router.delete("/cibil-repair-content/timelines/:publicId", requireAuth, requireAdmin, deleteAdminCibilRepairTimeline);
 router.get("/cibil-repair-requests", requireAuth, requireAdmin, getAdminCibilRepairRequests);
 router.patch(
   "/cibil-repair-requests/:publicId",

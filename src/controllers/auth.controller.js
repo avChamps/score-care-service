@@ -4,6 +4,7 @@ const {
 } = require("../services/msg91.service");
 const {
   createLoginEvent,
+  findUserByMobileNumber,
   upsertUserForOtpLogin
 } = require("../models/user.model");
 const { createAuthToken } = require("../services/token.service");
@@ -34,6 +35,38 @@ async function sendOtp(req, res, next) {
       return res.status(400).json({
         status: "error",
         message: "Valid 10 digit Indian mobile number is required"
+      });
+    }
+
+    const otpResponse = await sendMobileOtp(mobileNumber);
+
+    return res.status(200).json({
+      status: "success",
+      message: "OTP sent successfully",
+      data: otpResponse
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function sendAdminOtp(req, res, next) {
+  try {
+    const mobileNumber = String(req.body.mobileNumber || "").trim();
+
+    if (!mobilePattern.test(mobileNumber)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Valid 10 digit Indian mobile number is required"
+      });
+    }
+
+    const user = await findUserByMobileNumber(mobileNumber);
+
+    if (!user?.isAdmin) {
+      return res.status(403).json({
+        status: "error",
+        message: "You do not have administrator permissions."
       });
     }
 
@@ -126,6 +159,7 @@ async function verifyOtp(req, res, next) {
 }
 
 module.exports = {
+  sendAdminOtp,
   sendOtp,
   verifyOtp
 };

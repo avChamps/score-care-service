@@ -1,7 +1,11 @@
 const {
+  createCibilRepairTimeline,
+  deleteCibilRepairTimeline,
   listActiveCibilRepairContent,
   listAllCibilRepairContent,
-  replaceCibilRepairContent
+  patchCibilRepairContent,
+  replaceCibilRepairContent,
+  updateCibilRepairTimeline
 } = require("../models/cibil-repair-content.model");
 const {
   createCibilRepairRequest,
@@ -192,6 +196,194 @@ function validateCibilRepairContentPayload(body) {
   };
 }
 
+function normalizePartialPlans(body, errors) {
+  const plans = Array.isArray(body.plans)
+    ? body.plans
+    : body.plan
+      ? [body.plan]
+      : body.planName || body.amount !== undefined
+        ? [body]
+        : [];
+
+  return plans.map((plan, index) => {
+    const value = {
+      publicId: normalizeString(plan.publicId || plan.id) || undefined,
+      currentPlanName: normalizeString(plan.currentPlanName) || undefined,
+      currentDisplayOrder:
+        plan.currentDisplayOrder === undefined
+          ? undefined
+          : Number(plan.currentDisplayOrder),
+      planName: normalizeString(plan.planName) || undefined
+    };
+
+    if (
+      !value.publicId &&
+      !value.currentPlanName &&
+      !Number.isInteger(value.currentDisplayOrder) &&
+      !value.planName
+    ) {
+      errors.push(
+        `plans[${index}].publicId, plans[${index}].currentPlanName, or plans[${index}].planName is required`
+      );
+    }
+
+    if (
+      plan.currentDisplayOrder !== undefined &&
+      (!Number.isInteger(value.currentDisplayOrder) || value.currentDisplayOrder < 0)
+    ) {
+      errors.push(`plans[${index}].currentDisplayOrder must be a non-negative integer`);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(plan, "planName") && !value.planName) {
+      errors.push(`plans[${index}].planName is required`);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(plan, "amount")) {
+      value.amount = Number(plan.amount);
+
+      if (!Number.isFinite(value.amount) || value.amount < 0) {
+        errors.push(`plans[${index}].amount must be a valid non-negative number`);
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(plan, "currency")) {
+      value.currency = normalizeString(plan.currency).toUpperCase();
+
+      if (!/^[A-Z]{3}$/.test(value.currency)) {
+        errors.push(`plans[${index}].currency must be a 3-letter currency code`);
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(plan, "gstPercentage")) {
+      value.gstPercentage = Number(plan.gstPercentage);
+
+      if (!Number.isFinite(value.gstPercentage) || value.gstPercentage < 0) {
+        errors.push(`plans[${index}].gstPercentage must be a valid non-negative number`);
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(plan, "offerTag")) {
+      value.offerTag = normalizeNullableString(plan.offerTag);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(plan, "buttonLabel")) {
+      value.buttonLabel = normalizeNullableString(plan.buttonLabel);
+    }
+
+    if (Object.prototype.hasOwnProperty.call(plan, "displayOrder")) {
+      value.displayOrder = Number(plan.displayOrder);
+
+      if (!Number.isInteger(value.displayOrder) || value.displayOrder < 0) {
+        errors.push(`plans[${index}].displayOrder must be a non-negative integer`);
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(plan, "isActive")) {
+      value.isActive = parseOptionalBoolean(plan.isActive);
+
+      if (value.isActive === null) {
+        errors.push(`plans[${index}].isActive must be a boolean`);
+      }
+    }
+
+    return value;
+  });
+}
+
+function normalizePartialTimelines(body, errors) {
+  const timelines = Array.isArray(body.timelines)
+    ? body.timelines
+    : body.timeline
+      ? [body.timeline]
+      : body.title || body.description
+        ? [body]
+        : [];
+
+  return timelines.map((timeline, index) => {
+    const value = {
+      publicId: normalizeString(timeline.publicId || timeline.id) || undefined,
+      currentDisplayOrder:
+        timeline.currentDisplayOrder === undefined
+          ? Number(timeline.displayOrder)
+          : Number(timeline.currentDisplayOrder)
+    };
+
+    if (!value.publicId && !Number.isInteger(value.currentDisplayOrder)) {
+      errors.push(
+        `timelines[${index}].publicId or timelines[${index}].displayOrder is required`
+      );
+    }
+
+    if (Object.prototype.hasOwnProperty.call(timeline, "title")) {
+      value.title = normalizeString(timeline.title);
+
+      if (!value.title) {
+        errors.push(`timelines[${index}].title is required`);
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(timeline, "description")) {
+      value.description = normalizeString(timeline.description);
+
+      if (!value.description) {
+        errors.push(`timelines[${index}].description is required`);
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(timeline, "displayOrder")) {
+      value.displayOrder = Number(timeline.displayOrder);
+
+      if (!Number.isInteger(value.displayOrder) || value.displayOrder < 0) {
+        errors.push(
+          `timelines[${index}].displayOrder must be a non-negative integer`
+        );
+      }
+    }
+
+    if (Object.prototype.hasOwnProperty.call(timeline, "isActive")) {
+      value.isActive = parseOptionalBoolean(timeline.isActive);
+
+      if (value.isActive === null) {
+        errors.push(`timelines[${index}].isActive must be a boolean`);
+      }
+    }
+
+    return value;
+  });
+}
+
+function validateCibilRepairContentPatchPayload(body) {
+  const errors = [];
+
+  return {
+    errors,
+    value: {
+      plans: normalizePartialPlans(body, errors),
+      timelines: normalizePartialTimelines(body, errors)
+    }
+  };
+}
+
+function validateTimelinePayload(body) {
+  const errors = [];
+  const [timeline] = normalizeTimelines([body], errors);
+
+  return {
+    errors,
+    value: timeline
+  };
+}
+
+function validateTimelinePatchPayload(body) {
+  const errors = [];
+  const [timeline] = normalizePartialTimelines({ timelines: [body] }, errors);
+
+  return {
+    errors,
+    value: timeline
+  };
+}
+
 function toNonNegativeInteger(value, fieldName, errors) {
   const number = Number(value || 0);
 
@@ -369,7 +561,9 @@ async function getAdminCibilRepairContent(_req, res, next) {
 
 async function saveAdminCibilRepairContent(req, res, next) {
   try {
-    const { errors, value } = validateCibilRepairContentPayload(req.body);
+    const { errors, value } = req.method === "PATCH"
+      ? validateCibilRepairContentPatchPayload(req.body)
+      : validateCibilRepairContentPayload(req.body);
 
     if (errors.length > 0) {
       return res.status(400).json({
@@ -378,11 +572,101 @@ async function saveAdminCibilRepairContent(req, res, next) {
       });
     }
 
-    const content = await replaceCibilRepairContent(value);
+    const content = req.method === "PATCH"
+      ? await patchCibilRepairContent(value)
+      : await replaceCibilRepairContent(value);
 
     return res.status(200).json({
       status: "success",
       message: "CIBIL repair content updated successfully",
+      data: content
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function createAdminCibilRepairTimeline(req, res, next) {
+  try {
+    const { errors, value } = validateTimelinePayload(req.body);
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        status: "error",
+        errors
+      });
+    }
+
+    const content = await createCibilRepairTimeline(value);
+
+    return res.status(201).json({
+      status: "success",
+      message: "CIBIL repair timeline created successfully",
+      data: content
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function updateAdminCibilRepairTimeline(req, res, next) {
+  try {
+    const publicId = normalizeString(req.params.publicId);
+    const { errors, value } = validateTimelinePatchPayload(req.body);
+
+    if (!publicId) {
+      errors.push("publicId is required");
+    }
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        status: "error",
+        errors
+      });
+    }
+
+    const content = await updateCibilRepairTimeline(publicId, value);
+
+    if (!content) {
+      return res.status(404).json({
+        status: "error",
+        message: "CIBIL repair timeline not found"
+      });
+    }
+
+    return res.status(200).json({
+      status: "success",
+      message: "CIBIL repair timeline updated successfully",
+      data: content
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function deleteAdminCibilRepairTimeline(req, res, next) {
+  try {
+    const publicId = normalizeString(req.params.publicId);
+
+    if (!publicId) {
+      return res.status(400).json({
+        status: "error",
+        errors: ["publicId is required"]
+      });
+    }
+
+    const content = await deleteCibilRepairTimeline(publicId);
+
+    if (!content) {
+      return res.status(404).json({
+        status: "error",
+        message: "CIBIL repair timeline not found"
+      });
+    }
+
+    return res.status(200).json({
+      status: "success",
+      message: "CIBIL repair timeline deleted successfully",
       data: content
     });
   } catch (error) {
@@ -641,8 +925,10 @@ async function updateAdminCibilRepairRequest(req, res, next) {
 }
 
 module.exports = {
+  createAdminCibilRepairTimeline,
   createMyCibilRepairPaymentOrder,
   createMyCibilRepairRequest,
+  deleteAdminCibilRepairTimeline,
   getAdminCibilRepairContent,
   getAdminCibilRepairRequests,
   getCibilRepairContent,
@@ -650,5 +936,6 @@ module.exports = {
   getMyCibilRepairRequestById,
   getMyCibilRepairStatus,
   saveAdminCibilRepairContent,
+  updateAdminCibilRepairTimeline,
   updateAdminCibilRepairRequest
 };

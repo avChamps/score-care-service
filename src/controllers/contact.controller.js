@@ -1,4 +1,7 @@
-const { createContactMessage } = require("../models/contact-message.model");
+const {
+  createContactMessage,
+  listContactMessages
+} = require("../models/contact-message.model");
 
 function normalizeRequiredString(value) {
   return value === undefined || value === null ? "" : String(value).trim();
@@ -63,6 +66,26 @@ async function submitContactMessage(req, res, next) {
   }
 }
 
+async function getAdminContactRequests(req, res, next) {
+  try {
+    const data = await listContactMessages({
+      page: req.query.page,
+      limit: req.query.limit,
+      search: req.query.search,
+      from: req.query.from,
+      totime: req.query.totime
+    });
+
+    return res.status(200).json({
+      status: "success",
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
+  getAdminContactRequests,
   submitContactMessage
 };

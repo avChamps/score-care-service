@@ -58,6 +58,7 @@ app.use("/contact", contactRoutes);
 app.use("/credit-reports", creditReportRoutes);
 app.use("/api/disputes", disputeRoutes);
 app.use("/api/credit-repair", creditRepairDocumentRoutes);
+app.use("/credit-repair", creditRepairDocumentRoutes);
 app.use("/faqs", faqRoutes);
 app.use("/uploads", express.static("uploads"));
 app.use("/feedback", feedbackRoutes);
