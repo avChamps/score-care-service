@@ -70,8 +70,30 @@ async function fetchCrifCreditReport(payload) {
   );
 }
 
+async function fetchManualCreditReportPdf(type, payload) {
+  const paths = {
+    experian: env.surepass.experianReportPdfPath,
+    cibil: env.surepass.cibilReportPath,
+    crif: env.surepass.crifReportPdfPath
+  };
+  const reportPath = paths[type];
+
+  if (!reportPath) {
+    const error = new Error("Invalid credit bureau type");
+    error.statusCode = 400;
+    throw error;
+  }
+
+  return postSurepass(
+    reportPath,
+    payload,
+    `Failed to fetch ${type.toUpperCase()} report from Surepass`
+  );
+}
+
 module.exports = {
   fetchCibilCreditReport,
   fetchCrifCreditReport,
   fetchCrifCreditScore,
+  fetchManualCreditReportPdf,
 };

@@ -9,6 +9,7 @@ const {
   fetchCibilCreditReport,
   fetchCrifCreditReport,
   fetchCrifCreditScore,
+  fetchManualCreditReportPdf,
 } = require("../services/surepass.service");
 const {
   findCibilReportByUserId,
@@ -32,6 +33,14 @@ const mobilePattern = /^[6-9]\d{9}$/;
 const panPattern = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const allowedGenders = new Set(["male", "female"]);
 const execFileAsync = promisify(execFile);
+const manualReportTypeAliases = new Map([
+  ["experian", "experian"],
+  ["experian_pdf", "experian"],
+  ["cibil", "cibil"],
+  ["cibil_pdf", "cibil"],
+  ["crif", "crif"],
+  ["crif_pdf", "crif"]
+]);
 
 function getAuthInternalUserId(req) {
   return req.auth.internalUserId || req.auth.userId;
@@ -43,6 +52,79 @@ function normalizeConsent(consent) {
   }
 
   return String(consent || "").trim().toUpperCase();
+}
+
+function buildManualCreditReportRequest(body = {}) {
+  const type = manualReportTypeAliases.get(
+    String(body.type || "").trim().toLowerCase()
+  );
+  const mobile = String(body.mobile || body.mobileNumber || "").trim();
+  const pan = String(body.pan || body.panNumber || "").trim().toUpperCase();
+  const consent = normalizeConsent(body.consent);
+  const errors = [];
+
+  if (!type) {
+    errors.push("type must be experian, cibil, or crif");
+  }
+
+  if (!mobilePattern.test(mobile)) {
+    errors.push("Valid 10 digit Indian mobile number is required");
+  }
+
+  if (!panPattern.test(pan)) {
+    errors.push("Valid PAN number is required");
+  }
+
+  if (consent !== "Y") {
+    errors.push("consent must be Y");
+  }
+
+  if (type === "crif") {
+    const firstName = String(body.firstName || body.first_name || "").trim();
+    const lastName = String(body.lastName || body.last_name || "").trim();
+
+    if (!firstName) errors.push("firstName is required for CRIF");
+    if (!lastName) errors.push("lastName is required for CRIF");
+
+    return {
+      errors,
+      payload: {
+        first_name: firstName,
+        last_name: lastName,
+        mobile,
+        pan,
+        consent,
+        raw: false
+      },
+      type
+    };
+  }
+
+  const name = String(body.name || body.fullName || "").trim();
+
+  if (!name) {
+    errors.push("name is required");
+  }
+
+  if (type === "cibil") {
+    const gender = String(body.gender || "").trim().toLowerCase();
+
+    if (!allowedGenders.has(gender)) {
+      errors.push("gender must be male or female for CIBIL");
+    }
+
+    return {
+      errors,
+      payload: { mobile, pan, name, gender, consent },
+      type
+    };
+  }
+
+  return {
+    errors,
+    payload: { name, consent, mobile, pan },
+    type
+  };
 }
 
 function validateCibilReportPayload(body) {

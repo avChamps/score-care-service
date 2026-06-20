@@ -86,6 +86,12 @@ msg91: {
     cibilReportPath:
       process.env.SUREPASS_CIBIL_REPORT_PATH ||
       "/api/v1/credit-report-cibil/fetch-report-pdf",
+    experianReportPdfPath:
+      process.env.SUREPASS_EXPERIAN_REPORT_PDF_PATH ||
+      "/api/v1/credit-report-experian/fetch-report-pdf",
+    crifReportPdfPath:
+      process.env.SUREPASS_CRIF_REPORT_PDF_PATH ||
+      "/api/v1/credit-report-crif/fetch-report-pdf",
     crifScorePath:
       process.env.SUREPASS_CRIF_SCORE_PATH ||
       "/api/v1/credit-report-crif/score",
