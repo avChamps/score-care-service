@@ -41,7 +41,8 @@ async function getDashboardCounts(options = {}) {
     repairRequests: buildDateFilter("created_at"),
     disputes: buildDateFilter("created_at"),
     documents: buildDateFilter("created_at"),
-    notifications: buildDateFilter("created_at")
+    notifications: buildDateFilter("created_at"),
+    apiHits: buildDateFilter("created_at")
   };
   const monthlyFilter = buildDateFilter(
     "created_at",
@@ -77,6 +78,7 @@ async function getDashboardCounts(options = {}) {
     [disputeCounts],
     [documentCounts],
     [notificationCounts],
+    [apiHitCounts],
     [userStatusRows],
     [accessTypeRows],
     [subscriptionStatusRows],
@@ -214,6 +216,12 @@ async function getDashboardCounts(options = {}) {
       filters.notifications.params
     ),
     pool.query(
+      `SELECT COUNT(*) AS totalApiHits
+      FROM credit_bureau_api_hits
+      ${filters.apiHits.where}`,
+      filters.apiHits.params
+    ),
+    pool.query(
       `SELECT status AS label, COUNT(*) AS count
       FROM users
       ${filters.users.where}
@@ -329,6 +337,7 @@ async function getDashboardCounts(options = {}) {
     totalDocuments: Number(documentCounts[0]?.totalDocuments || 0),
     totalNotifications: Number(notificationCounts[0]?.totalNotifications || 0),
     unreadNotifications: Number(notificationCounts[0]?.unreadNotifications || 0),
+    apiHistoryCount: Number(apiHitCounts[0]?.totalApiHits || 0),
     employees: {
       total: Number(employeeCounts[0]?.totalEmployees || 0),
       active: Number(employeeCounts[0]?.activeEmployees || 0),
