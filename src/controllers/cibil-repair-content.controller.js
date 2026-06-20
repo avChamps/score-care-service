@@ -17,9 +17,6 @@ const {
   updateCibilRepairRequest
 } = require("../models/cibil-repair-request.model");
 const {
-  listCreditRepairDocumentsByUserId
-} = require("../models/credit-repair-document.model");
-const {
   countUnreadNotificationsByUserPublicId,
   createCibilRepairRequestCreatedNotification,
   createCibilRepairRequestUpdatedNotification,
@@ -397,6 +394,37 @@ function toNonNegativeInteger(value, fieldName, errors) {
   return number;
 }
 
+function normalizeRepairAccounts(accounts, errors) {
+  if (accounts === undefined) {
+    return [];
+  }
+
+  if (!Array.isArray(accounts)) {
+    errors.push("accounts must be an array");
+    return [];
+  }
+
+  return accounts.map((account, index) => {
+    const accountNumber = normalizeString(account.accountNumber);
+    const accountType = normalizeString(account.accountType);
+
+    if (!accountNumber) {
+      errors.push(`accounts[${index}].accountNumber is required`);
+    }
+
+    if (!accountType) {
+      errors.push(`accounts[${index}].accountType is required`);
+    }
+
+    return {
+      accountNumber,
+      accountType,
+      subscriberName: normalizeNullableString(account.subscriberName),
+      issueType: normalizeNullableString(account.issueType)
+    };
+  });
+}
+
 function validateCibilRepairRequestPayload(body) {
   const errors = [];
   const planName = normalizeString(body.planName);
@@ -452,7 +480,8 @@ function validateCibilRepairRequestPayload(body) {
       razorpayPaymentId,
       razorpaySignature,
       repairStatus,
-      remarks: "Please upload your docs"
+      remarks: "Please upload your docs",
+      accounts: normalizeRepairAccounts(body.accounts, errors)
     }
   };
 }
@@ -769,10 +798,7 @@ async function createMyCibilRepairPaymentOrder(req, res, next) {
 
 async function getMyCibilRepairRequest(req, res, next) {
   try {
-    const [requests, documents] = await Promise.all([
-      listCibilRepairRequestsByUserId(req.auth.internalUserId),
-      listCreditRepairDocumentsByUserId(req.auth.internalUserId)
-    ]);
+    const requests = await listCibilRepairRequestsByUserId(req.auth.internalUserId);
 
     return res.status(200).json({
       status: "success",
@@ -784,12 +810,7 @@ async function getMyCibilRepairRequest(req, res, next) {
           (request) => request.repairStatus === "resolved"
         ).length,
         requests,
-        accounts: documents.map((document) => ({
-          accountNumber: document.accountNumber,
-          accountType: document.accountType,
-          subscriberName: document.bankName,
-          issueType: document.issueType
-        }))
+        accounts: requests[0]?.accounts || []
       }
     });
   } catch (error) {

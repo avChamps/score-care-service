@@ -38,6 +38,7 @@ function mapCibilRepairRequest(row) {
     pointsGained: Number(row.pointsGained),
     progressItems: parseJson(row.progressItems) || [],
     remarks: row.remarks,
+    accounts: parseJson(row.accounts) || [],
     createdAt: row.createdAt,
     updatedAt: row.updatedAt
   };
@@ -60,6 +61,7 @@ function requestSelect() {
     points_gained AS pointsGained,
     progress_items AS progressItems,
     remarks,
+    accounts,
     created_at AS createdAt,
     updated_at AS updatedAt
   FROM cibil_repair_requests`;
@@ -81,9 +83,10 @@ async function createCibilRepairRequest(userId, userPublicId, request) {
       razorpay_order_id,
       razorpay_payment_id,
       repair_status,
-      remarks
+      remarks,
+      accounts
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       publicId,
       userId,
@@ -96,7 +99,8 @@ async function createCibilRepairRequest(userId, userPublicId, request) {
       request.razorpayOrderId,
       request.razorpayPaymentId,
       request.repairStatus,
-      request.remarks
+      request.remarks,
+      JSON.stringify(request.accounts || [])
     ]
   );
 
