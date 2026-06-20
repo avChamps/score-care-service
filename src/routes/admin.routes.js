@@ -26,6 +26,10 @@ const {
   getAdminContactRequests
 } = require("../controllers/contact.controller");
 const {
+  getAdminSentAppNotifications,
+  sendAdminAppNotification
+} = require("../controllers/notification.controller");
+const {
   getAdminGeneralDetails,
   saveAdminGeneralDetails
 } = require("../controllers/general.controller");
@@ -58,6 +62,8 @@ router.get("/subscription-plans", requireAuth, requireAdmin, getAllSubscriptionP
 router.post("/subscription-plans", requireAuth, requireAdmin, createPlan);
 router.get("/feedback", requireAuth, requireAdmin, getAllFeedback);
 router.get("/contact-requests", requireAuth, requireAdmin, getAdminContactRequests);
+router.get("/app-notifications", requireAuth, requireAdmin, getAdminSentAppNotifications);
+router.post("/app-notifications", requireAuth, requireAdmin, sendAdminAppNotification);
 router.get("/faqs", requireAuth, requireAdmin, getAllFaqs);
 router.post("/faqs", requireAuth, requireAdmin, saveFaqs);
 router.get("/general", requireAuth, requireAdmin, getAdminGeneralDetails);

@@ -49,6 +49,25 @@ function mapUserFcmToken(row) {
   };
 }
 
+function mapAdminSentNotification(row) {
+  const notification = mapNotification(row);
+
+  if (!notification) {
+    return null;
+  }
+
+  return {
+    ...notification,
+    user: {
+      id: row.userPublicId,
+      publicId: row.userPublicId,
+      fullName: row.fullName,
+      mobileNumber: row.mobileNumber,
+      email: row.email
+    }
+  };
+}
+
 async function upsertUserFcmToken(userId, token) {
   const [updateResult] = await pool.query(
     `UPDATE user_fcm_tokens
@@ -238,6 +257,50 @@ async function createNotification(userId, notification) {
   }
 
   return findNotificationByIdForUserPublicId(result.insertId, userPublicId);
+}
+
+async function listAdminNotificationTargetUsers(options = {}) {
+  const userPublicIds = Array.isArray(options.userPublicIds)
+    ? options.userPublicIds.map((id) => String(id || "").trim()).filter(Boolean)
+    : [];
+
+  const where = userPublicIds.length
+    ? "WHERE public_id IN (?)"
+    : "WHERE status = 'active'";
+  const params = userPublicIds.length ? [userPublicIds] : [];
+  const [rows] = await pool.query(
+    `SELECT
+      id AS userId,
+      public_id AS publicId
+    FROM users
+    ${where}`,
+    params
+  );
+
+  return rows;
+}
+
+async function createAdminAppNotifications(users, notification) {
+  const notifications = [];
+
+  for (const user of users) {
+    const createdNotification = await createNotification(user.userId, {
+      type: "admin_app_notification",
+      title: notification.title,
+      message: notification.message,
+      notificationKey: `admin_app_notification:${notification.batchId}:${user.userId}`,
+      data: {
+        ...(notification.data || {}),
+        batchId: notification.batchId,
+        imageUrl: notification.imageUrl || undefined,
+        screen: notification.screen || undefined
+      }
+    });
+
+    notifications.push(createdNotification);
+  }
+
+  return notifications;
 }
 
 async function createLoanAppliedNotification(userId, loanApplication) {
@@ -645,8 +708,87 @@ async function markAllNotificationsReadByUserPublicId(userPublicId) {
   return result.affectedRows;
 }
 
+async function listAdminSentAppNotifications(options = {}) {
+  const page = Math.max(Number(options.page) || 1, 1);
+  const limit = Math.min(Math.max(Number(options.limit) || 20, 1), 100);
+  const offset = (page - 1) * limit;
+  const search = String(options.search || "").trim();
+  const from = String(options.from || "").trim();
+  const totime = String(options.totime || "").trim();
+  const conditions = ["n.type = 'admin_app_notification'"];
+  const params = [];
+
+  if (search) {
+    const searchPattern = `%${search}%`;
+
+    conditions.push(`(
+      n.title LIKE ?
+      OR n.message LIKE ?
+      OR u.full_name LIKE ?
+      OR u.mobile_number LIKE ?
+      OR u.email LIKE ?
+    )`);
+    params.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+  }
+
+  if (from) {
+    conditions.push("n.created_at >= ?");
+    params.push(from);
+  }
+
+  if (totime) {
+    conditions.push("n.created_at <= ?");
+    params.push(totime);
+  }
+
+  const where = `WHERE ${conditions.join(" AND ")}`;
+  const [[countRows], [rows]] = await Promise.all([
+    pool.query(
+      `SELECT COUNT(*) AS total
+      FROM notifications n
+      INNER JOIN users u ON u.id = n.user_id
+      ${where}`,
+      params
+    ),
+    pool.query(
+      `SELECT
+        n.id,
+        n.user_public_id AS userPublicId,
+        n.type,
+        n.title,
+        n.message,
+        n.data,
+        n.read_at AS readAt,
+        n.created_at AS createdAt,
+        n.updated_at AS updatedAt,
+        u.full_name AS fullName,
+        u.mobile_number AS mobileNumber,
+        u.email
+      FROM notifications n
+      INNER JOIN users u ON u.id = n.user_id
+      ${where}
+      ORDER BY n.created_at DESC, n.id DESC
+      LIMIT ?
+      OFFSET ?`,
+      [...params, limit, offset]
+    )
+  ]);
+  const total = Number(countRows[0]?.total || 0);
+
+  return {
+    notifications: rows.map(mapAdminSentNotification),
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit)
+    }
+  };
+}
+
 module.exports = {
   countUnreadNotificationsByUserPublicId,
+  createAdminAppNotifications,
   createCibilRepairRequestCreatedNotification,
   createCibilRepairRequestUpdatedNotification,
   createCreditDisputeSubmittedNotification,
@@ -661,6 +803,8 @@ module.exports = {
   createSubscriptionRenewalReminderNotifications,
   createNotification,
   disableFcmTokens,
+  listAdminNotificationTargetUsers,
+  listAdminSentAppNotifications,
   listNotificationsByUserPublicId,
   listActiveFcmTokensByUserIds,
   listAllActiveFcmTokens,

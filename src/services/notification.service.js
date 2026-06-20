@@ -12,6 +12,7 @@ const INVALID_TOKEN_ERROR_CODES = new Set([
 ]);
 
 const ALLOWED_PUSH_TYPES = new Set([
+  "admin_app_notification",
   "cibil_report_updated",
   "inactive_user_reminder",
   "loan_applied",

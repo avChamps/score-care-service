@@ -1,11 +1,68 @@
+const { randomUUID } = require("crypto");
+
 const {
   countUnreadNotificationsByUserPublicId,
+  createAdminAppNotifications,
+  listAdminNotificationTargetUsers,
+  listAdminSentAppNotifications,
   listNotificationsByUserPublicId,
   markAllNotificationsReadByUserPublicId,
   markNotificationReadByUserPublicId,
   upsertUserFcmToken
 } = require("../models/notification.model");
-const { sendToUser } = require("../services/notification.service");
+const {
+  sendToMultipleUsers,
+  sendToUser
+} = require("../services/notification.service");
+
+function normalizeString(value) {
+  return String(value || "").trim();
+}
+
+function normalizeObject(value) {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value
+    : {};
+}
+
+function validateAdminAppNotificationPayload(body) {
+  const userPublicIds = Array.isArray(body.userPublicIds)
+    ? body.userPublicIds.map(normalizeString).filter(Boolean)
+    : [];
+  const scope = normalizeString(body.scope || (userPublicIds.length ? "users" : "all"));
+  const title = normalizeString(body.title);
+  const message = normalizeString(body.message || body.body);
+  const errors = [];
+
+  if (!title) {
+    errors.push("title is required");
+  }
+
+  if (!message) {
+    errors.push("message is required");
+  }
+
+  if (!["all", "users"].includes(scope)) {
+    errors.push("scope must be all or users");
+  }
+
+  if (scope === "users" && userPublicIds.length === 0) {
+    errors.push("userPublicIds is required");
+  }
+
+  return {
+    errors,
+    value: {
+      scope,
+      userPublicIds,
+      title,
+      message,
+      imageUrl: normalizeString(body.imageUrl) || undefined,
+      screen: normalizeString(body.screen) || undefined,
+      data: normalizeObject(body.data)
+    }
+  };
+}
 
 async function getMyNotifications(req, res, next) {
   try {
@@ -132,10 +189,88 @@ async function sendTestNotification(req, res, next) {
   }
 }
 
+async function sendAdminAppNotification(req, res, next) {
+  try {
+    const { errors, value } = validateAdminAppNotificationPayload(req.body);
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        status: "error",
+        errors
+      });
+    }
+
+    const users = await listAdminNotificationTargetUsers({
+      userPublicIds: value.scope === "users" ? value.userPublicIds : []
+    });
+
+    if (users.length === 0) {
+      return res.status(404).json({
+        status: "error",
+        message: "No users found"
+      });
+    }
+
+    const batchId = randomUUID();
+    const notifications = await createAdminAppNotifications(users, {
+      ...value,
+      batchId
+    });
+    const push = await sendToMultipleUsers(
+      users.map((user) => user.userId),
+      {
+        title: value.title,
+        body: value.message,
+        imageUrl: value.imageUrl,
+        screen: value.screen,
+        data: {
+          ...value.data,
+          type: "admin_app_notification",
+          batchId
+        }
+      }
+    );
+
+    return res.status(201).json({
+      status: "success",
+      message: "App notification sent successfully",
+      data: {
+        batchId,
+        recipientCount: users.length,
+        savedCount: notifications.length,
+        push
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getAdminSentAppNotifications(req, res, next) {
+  try {
+    const data = await listAdminSentAppNotifications({
+      page: req.query.page,
+      limit: req.query.limit,
+      search: req.query.search,
+      from: req.query.from,
+      totime: req.query.totime
+    });
+
+    return res.status(200).json({
+      status: "success",
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
+  getAdminSentAppNotifications,
   getMyNotifications,
   readAllNotifications,
   readNotification,
   registerDevice,
+  sendAdminAppNotification,
   sendTestNotification
 };
