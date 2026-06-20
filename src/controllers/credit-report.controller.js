@@ -18,6 +18,7 @@ const {
   findCrifScoreByUserId,
   findLatestSavedCreditReportByUserId,
   listAdminCreditReportDownloads,
+  listAdminManualCreditReportDownloads,
   listCreditReportDownloadsByUserId,
   saveCibilReport,
   saveCrifReport,
@@ -2159,6 +2160,26 @@ async function getAdminCreditReportDownloads(req, res, next) {
   }
 }
 
+async function getAdminManualCreditReportDownloads(req, res, next) {
+  try {
+    const data = await listAdminManualCreditReportDownloads({
+      page: req.query.page,
+      limit: req.query.limit,
+      search: req.query.search,
+      type: req.query.type,
+      from: req.query.from,
+      totime: req.query.totime
+    });
+
+    return res.status(200).json({
+      status: "success",
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function downloadManualCibilReport(req, res, next) {
   try {
     const { errors, payload, type } = buildManualCreditReportRequest(req.body);
@@ -2246,6 +2267,7 @@ module.exports = {
   downloadCibilCreditReport,
   downloadManualCibilReport,
   getAdminCreditReportDownloads,
+  getAdminManualCreditReportDownloads,
   getCreditReportDownloads,
   getCrifCreditReport,
   getCrifCreditScore,

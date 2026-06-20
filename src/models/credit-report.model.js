@@ -436,6 +436,124 @@ async function createManualCreditReportDownload(values) {
   return publicId;
 }
 
+async function listAdminManualCreditReportDownloads(options = {}) {
+  const page = Math.max(Number(options.page) || 1, 1);
+  const limit = Math.min(Math.max(Number(options.limit) || 20, 1), 100);
+  const offset = (page - 1) * limit;
+  const search = String(options.search || "").trim();
+  const type = String(options.type || "").trim().toLowerCase();
+  const from = String(options.from || "").trim();
+  const totime = String(options.totime || "").trim();
+  const conditions = [];
+  const params = [];
+
+  if (search) {
+    const searchPattern = `%${search}%`;
+
+    conditions.push(`(
+      mcrd.public_id LIKE ?
+      OR mcrd.client_id LIKE ?
+      OR mcrd.name LIKE ?
+      OR mcrd.first_name LIKE ?
+      OR mcrd.last_name LIKE ?
+      OR mcrd.mobile LIKE ?
+      OR mcrd.pan LIKE ?
+    )`);
+    params.push(
+      searchPattern,
+      searchPattern,
+      searchPattern,
+      searchPattern,
+      searchPattern,
+      searchPattern,
+      searchPattern
+    );
+  }
+
+  if (type) {
+    conditions.push("mcrd.bureau_type = ?");
+    params.push(type);
+  }
+
+  if (from) {
+    conditions.push("mcrd.downloaded_at >= ?");
+    params.push(from);
+  }
+
+  if (totime) {
+    conditions.push(
+      /^\d{4}-\d{2}-\d{2}$/.test(totime)
+        ? "mcrd.downloaded_at < DATE_ADD(?, INTERVAL 1 DAY)"
+        : "mcrd.downloaded_at <= ?"
+    );
+    params.push(totime);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const [[countRows], [rows]] = await Promise.all([
+    pool.query(
+      `SELECT COUNT(*) AS total
+      FROM manual_credit_report_downloads mcrd
+      ${where}`,
+      params
+    ),
+    pool.query(
+      `SELECT
+        mcrd.public_id AS id,
+        mcrd.public_id AS publicId,
+        mcrd.bureau_type AS type,
+        mcrd.client_id AS clientId,
+        mcrd.name,
+        mcrd.first_name AS firstName,
+        mcrd.last_name AS lastName,
+        mcrd.mobile,
+        mcrd.pan,
+        mcrd.gender,
+        mcrd.credit_score AS creditScore,
+        mcrd.credit_report AS creditReport,
+        mcrd.credit_report_link AS creditReportLink,
+        (mcrd.credit_report_base64 IS NOT NULL) AS hasPdf,
+        mcrd.request_payload AS requestPayload,
+        mcrd.provider_response AS providerResponse,
+        mcrd.provider_status_code AS providerStatusCode,
+        mcrd.provider_message AS providerMessage,
+        mcrd.provider_message_code AS providerMessageCode,
+        u.public_id AS downloadedByUserId,
+        u.full_name AS downloadedByUserName,
+        e.public_id AS downloadedByEmployeeId,
+        e.employee_code AS downloadedByEmployeeCode,
+        e.full_name AS downloadedByEmployeeName,
+        mcrd.downloaded_at AS downloadedAt,
+        mcrd.created_at AS createdAt
+      FROM manual_credit_report_downloads mcrd
+      LEFT JOIN users u ON u.id = mcrd.downloaded_by_user_id
+      LEFT JOIN employees e ON e.id = mcrd.downloaded_by_employee_id
+      ${where}
+      ORDER BY mcrd.downloaded_at DESC, mcrd.id DESC
+      LIMIT ?
+      OFFSET ?`,
+      [...params, limit, offset]
+    )
+  ]);
+  const total = Number(countRows[0]?.total || 0);
+
+  return {
+    downloads: rows.map((row) => ({
+      ...row,
+      hasPdf: Boolean(row.hasPdf),
+      creditReport: parseJson(row.creditReport),
+      requestPayload: parseJson(row.requestPayload),
+      providerResponse: parseJson(row.providerResponse)
+    })),
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit)
+    }
+  };
+}
+
 module.exports = {
   createManualCreditReportDownload,
   findCibilReportByUserId,
@@ -443,6 +561,7 @@ module.exports = {
   findCrifScoreByUserId,
   findLatestSavedCreditReportByUserId,
   listAdminCreditReportDownloads,
+  listAdminManualCreditReportDownloads,
   listCreditReportDownloadsByUserId,
   saveCibilReport,
   saveCrifReport,
