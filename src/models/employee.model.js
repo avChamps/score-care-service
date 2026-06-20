@@ -181,7 +181,7 @@ async function createEmployee(values) {
   const publicId = randomUUID();
   const roleId = await resolveRoleId(values.rolePublicId);
 
-  await pool.query(
+  const [result] = await pool.query(
     `INSERT INTO employees (
       public_id,
       employee_code,
@@ -200,7 +200,7 @@ async function createEmployee(values) {
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       publicId,
-      values.employeeCode,
+      null,
       values.fullName,
       values.mobileNumber,
       values.email,
@@ -213,6 +213,13 @@ async function createEmployee(values) {
       values.updatedByUserId,
       values.updatedByUserId
     ]
+  );
+
+  await pool.query(
+    `UPDATE employees
+    SET employee_code = ?
+    WHERE id = ?`,
+    [`EMP${String(result.insertId).padStart(3, "0")}`, result.insertId]
   );
 
   return findEmployeeByPublicId(publicId);

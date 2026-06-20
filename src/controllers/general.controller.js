@@ -123,7 +123,8 @@ function validateGeneralSettingsPayload(body) {
     email: normalizeString(body.email),
     mobileNumber: normalizeString(body.mobileNumber),
     whatsappNumber: normalizeString(body.whatsappNumber),
-    selectedLanguage: normalizeString(body.selectedLanguage) || "English"
+    selectedLanguage: normalizeString(body.selectedLanguage) || "English",
+    address: normalizeString(body.address)
   };
 
   if (!value.website) {
@@ -140,6 +141,10 @@ function validateGeneralSettingsPayload(body) {
 
   if (!value.whatsappNumber) {
     errors.push("whatsappNumber is required");
+  }
+
+  if (!value.address) {
+    errors.push("address is required");
   }
 
   return { errors, value };

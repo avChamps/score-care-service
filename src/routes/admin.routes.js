@@ -66,6 +66,10 @@ const {
   saveAdminLoanOptions
 } = require("../controllers/loan.controller");
 const {
+  downloadAdminCibilReportByUserId,
+  getAdminCreditReportDownloads
+} = require("../controllers/credit-report.controller");
+const {
   requireAdmin,
   requireAuth
 } = require("../middleware/auth.middleware");
@@ -73,6 +77,13 @@ const {
 const router = express.Router();
 
 router.get("/dashboard-counts", requireAuth, requireAdmin, getAdminDashboardCounts);
+router.get("/cibil-report-downloads", requireAuth, requireAdmin, getAdminCreditReportDownloads);
+router.get(
+  "/cibil-report-download/:userId",
+  requireAuth,
+  requireAdmin,
+  downloadAdminCibilReportByUserId
+);
 router.get("/subscription-plans", requireAuth, requireAdmin, getAllSubscriptionPlans);
 router.post("/subscription-plans", requireAuth, requireAdmin, createPlan);
 router.get("/feedback", requireAuth, requireAdmin, getAllFeedback);

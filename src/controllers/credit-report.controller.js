@@ -15,6 +15,7 @@ const {
   findCrifReportByUserId,
   findCrifScoreByUserId,
   findLatestSavedCreditReportByUserId,
+  listAdminCreditReportDownloads,
   listCreditReportDownloadsByUserId,
   saveCibilReport,
   saveCrifReport,
@@ -23,7 +24,8 @@ const {
   saveCreditReportDownload
 } = require("../models/credit-report.model");
 const {
-  findUserById
+  findUserById,
+  findUserByPublicId
 } = require("../models/user.model");
 
 const mobilePattern = /^[6-9]\d{9}$/;
@@ -2053,8 +2055,71 @@ async function getCreditReportDownloads(req, res, next) {
   }
 }
 
+async function getAdminCreditReportDownloads(req, res, next) {
+  try {
+    const data = await listAdminCreditReportDownloads({
+      page: req.query.page,
+      limit: req.query.limit,
+      search: req.query.search,
+      reportType: req.query.reportType,
+      provider: req.query.provider,
+      from: req.query.from,
+      totime: req.query.totime
+    });
+
+    return res.status(200).json({
+      status: "success",
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function downloadAdminCibilReportByUserId(req, res, next) {
+  try {
+    const user = await findUserByPublicId(req.params.userId);
+
+    if (!user) {
+      return res.status(404).json({
+        status: "error",
+        message: "User not found"
+      });
+    }
+
+    const savedReport = await findLatestSavedCreditReportByUserId(user.internalId);
+    const reportData = savedReport ? getReportSource(savedReport) : null;
+
+    if (
+      !savedReport ||
+      (!savedReport.creditReportBase64 && Object.keys(reportData || {}).length === 0)
+    ) {
+      return res.status(404).json({
+        status: "error",
+        message: "User has not upgraded to access the CIBIL report"
+      });
+    }
+
+    const pdfBuffer = savedReport.creditReportBase64
+      ? Buffer.from(savedReport.creditReportBase64, "base64")
+      : await createCibilReportPdfBuffer(savedReport);
+
+    await saveCreditReportDownload(
+      user.internalId,
+      savedReport.id,
+      savedReport.reportType
+    );
+
+    return sendPdfBuffer(res, savedReport, pdfBuffer);
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
+  downloadAdminCibilReportByUserId,
   downloadCibilCreditReport,
+  getAdminCreditReportDownloads,
   getCreditReportDownloads,
   getCrifCreditReport,
   getCrifCreditScore,

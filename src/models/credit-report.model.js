@@ -276,11 +276,113 @@ async function listCreditReportDownloadsByUserId(userId) {
   return rows;
 }
 
+async function listAdminCreditReportDownloads(options = {}) {
+  const page = Math.max(Number(options.page) || 1, 1);
+  const limit = Math.min(Math.max(Number(options.limit) || 20, 1), 100);
+  const offset = (page - 1) * limit;
+  const search = String(options.search || "").trim();
+  const reportType = String(options.reportType || "").trim();
+  const provider = String(options.provider || "").trim();
+  const from = String(options.from || "").trim();
+  const totime = String(options.totime || "").trim();
+  const conditions = [];
+  const params = [];
+
+  if (search) {
+    const searchPattern = `%${search}%`;
+
+    conditions.push(`(
+      u.public_id LIKE ?
+      OR u.full_name LIKE ?
+      OR u.mobile_number LIKE ?
+      OR u.email LIKE ?
+      OR u.pan_number LIKE ?
+      OR cr.client_id LIKE ?
+    )`);
+    params.push(
+      searchPattern,
+      searchPattern,
+      searchPattern,
+      searchPattern,
+      searchPattern,
+      searchPattern
+    );
+  }
+
+  if (reportType) {
+    conditions.push("crd.report_type = ?");
+    params.push(reportType);
+  }
+
+  if (provider) {
+    conditions.push("cr.provider = ?");
+    params.push(provider);
+  }
+
+  if (from) {
+    conditions.push("crd.downloaded_at >= ?");
+    params.push(from);
+  }
+
+  if (totime) {
+    conditions.push("crd.downloaded_at <= ?");
+    params.push(totime);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const joins = `FROM credit_report_downloads crd
+    INNER JOIN users u ON u.id = crd.user_id
+    LEFT JOIN credit_reports cr ON cr.id = crd.credit_report_id`;
+  const [[countRows], [rows]] = await Promise.all([
+    pool.query(
+      `SELECT COUNT(*) AS total
+      ${joins}
+      ${where}`,
+      params
+    ),
+    pool.query(
+      `SELECT
+        crd.id,
+        crd.credit_report_id AS creditReportId,
+        crd.report_type AS reportType,
+        u.public_id AS userId,
+        u.full_name AS fullName,
+        u.mobile_number AS mobileNumber,
+        u.email,
+        u.pan_number AS panNumber,
+        cr.provider,
+        cr.client_id AS clientId,
+        cr.credit_score AS creditScore,
+        cr.fetched_at AS reportFetchedAt,
+        crd.downloaded_at AS downloadedAt,
+        crd.created_at AS createdAt
+      ${joins}
+      ${where}
+      ORDER BY crd.downloaded_at DESC, crd.id DESC
+      LIMIT ?
+      OFFSET ?`,
+      [...params, limit, offset]
+    )
+  ]);
+  const total = Number(countRows[0]?.total || 0);
+
+  return {
+    downloads: rows,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit)
+    }
+  };
+}
+
 module.exports = {
   findCibilReportByUserId,
   findCrifReportByUserId,
   findCrifScoreByUserId,
   findLatestSavedCreditReportByUserId,
+  listAdminCreditReportDownloads,
   listCreditReportDownloadsByUserId,
   saveCibilReport,
   saveCrifReport,

@@ -1,6 +1,54 @@
 const { pool } = require("../config/db");
 
-async function getDashboardCounts() {
+async function getDashboardCounts(options = {}) {
+  const from = String(options.from || "").trim();
+  const totime = String(options.totime || "").trim();
+  const buildDateFilter = (column, baseConditions = []) => {
+    const conditions = [...baseConditions];
+    const params = [];
+
+    if (from) {
+      conditions.push(`${column} >= ?`);
+      params.push(from);
+    }
+
+    if (totime) {
+      if (/^\d{4}-\d{2}-\d{2}$/.test(totime)) {
+        conditions.push(`${column} < DATE_ADD(?, INTERVAL 1 DAY)`);
+      } else {
+        conditions.push(`${column} <= ?`);
+      }
+      params.push(totime);
+    }
+
+    return {
+      where: conditions.length ? `WHERE ${conditions.join(" AND ")}` : "",
+      params
+    };
+  };
+  const filters = {
+    users: buildDateFilter("created_at"),
+    messages: buildDateFilter("created_at"),
+    feedback: buildDateFilter("created_at"),
+    feedbackRatings: buildDateFilter("created_at", ["rating IS NOT NULL"]),
+    loans: buildDateFilter("created_at"),
+    subscriptionPayments: buildDateFilter("created_at", ["payment_status = 'paid'"]),
+    repairPayments: buildDateFilter("created_at", ["payment_status = 'paid'"]),
+    employees: buildDateFilter("created_at", ["deleted_at IS NULL"]),
+    roles: buildDateFilter("created_at", ["deleted_at IS NULL"]),
+    contacts: buildDateFilter("created_at"),
+    creditReports: buildDateFilter("created_at"),
+    repairRequests: buildDateFilter("created_at"),
+    disputes: buildDateFilter("created_at"),
+    documents: buildDateFilter("created_at"),
+    notifications: buildDateFilter("created_at")
+  };
+  const monthlyFilter = buildDateFilter(
+    "created_at",
+    from || totime
+      ? []
+      : ["created_at >= DATE_FORMAT(CURRENT_DATE - INTERVAL 11 MONTH, '%Y-%m-01')"]
+  );
   const toPercentage = (count, total) =>
     total > 0 ? Number(((count / total) * 100).toFixed(2)) : 0;
   const mapCountRows = (rows, total) =>
@@ -20,10 +68,21 @@ async function getDashboardCounts() {
     [feedbackRatingRows],
     [loanCounts],
     [paymentCounts],
+    [repairPaymentCounts],
+    [employeeCounts],
+    [roleCounts],
+    [contactCounts],
+    [creditReportCounts],
+    [repairRequestCounts],
+    [disputeCounts],
+    [documentCounts],
+    [notificationCounts],
     [userStatusRows],
     [accessTypeRows],
     [subscriptionStatusRows],
     [loanStatusRows],
+    [repairStatusRows],
+    [disputeStatusRows],
     [monthlyRows]
   ] = await Promise.all([
     pool.query(
@@ -41,16 +100,29 @@ async function getDashboardCounts() {
             AND subscription_due_at <= DATE_ADD(NOW(), INTERVAL 7 DAY)
           THEN 1 ELSE 0
         END) AS upcomingOverdues
-      FROM users`
+      FROM users
+      ${filters.users.where}`,
+      filters.users.params
     ),
-    pool.query("SELECT COUNT(*) AS totalMessages FROM ai_prompt_messages"),
-    pool.query("SELECT COUNT(*) AS totalFeedback FROM feedback"),
+    pool.query(
+      `SELECT COUNT(*) AS totalMessages
+      FROM ai_prompt_messages
+      ${filters.messages.where}`,
+      filters.messages.params
+    ),
+    pool.query(
+      `SELECT COUNT(*) AS totalFeedback
+      FROM feedback
+      ${filters.feedback.where}`,
+      filters.feedback.params
+    ),
     pool.query(
       `SELECT rating AS label, COUNT(*) AS count
       FROM feedback
-      WHERE rating IS NOT NULL
+      ${filters.feedbackRatings.where}
       GROUP BY rating
-      ORDER BY rating DESC`
+      ORDER BY rating DESC`,
+      filters.feedbackRatings.params
     ),
     pool.query(
       `SELECT
@@ -58,17 +130,95 @@ async function getDashboardCounts() {
         SUM(CASE WHEN status = 'approved' THEN 1 ELSE 0 END) AS approved,
         SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejected,
         SUM(CASE WHEN status IN ('submitted', 'in_review') THEN 1 ELSE 0 END) AS pending
-      FROM loan_applications`
+      FROM loan_applications
+      ${filters.loans.where}`,
+      filters.loans.params
     ),
     pool.query(
       `SELECT COALESCE(SUM(amount), 0) AS amount
       FROM subscription_payments
-      WHERE payment_status = 'paid'`
+      ${filters.subscriptionPayments.where}`,
+      filters.subscriptionPayments.params
+    ),
+    pool.query(
+      `SELECT COALESCE(SUM(amount), 0) AS amount
+      FROM cibil_repair_requests
+      ${filters.repairPayments.where}`,
+      filters.repairPayments.params
+    ),
+    pool.query(
+      `SELECT
+        COUNT(*) AS totalEmployees,
+        SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS activeEmployees,
+        SUM(CASE WHEN status = 'inactive' THEN 1 ELSE 0 END) AS inactiveEmployees,
+        SUM(CASE WHEN status = 'suspended' THEN 1 ELSE 0 END) AS suspendedEmployees
+      FROM employees
+      ${filters.employees.where}`,
+      filters.employees.params
+    ),
+    pool.query(
+      `SELECT
+        COUNT(*) AS totalRoles,
+        SUM(CASE WHEN status = 'active' THEN 1 ELSE 0 END) AS activeRoles,
+        SUM(CASE WHEN status = 'inactive' THEN 1 ELSE 0 END) AS inactiveRoles
+      FROM employee_roles
+      ${filters.roles.where}`,
+      filters.roles.params
+    ),
+    pool.query(
+      `SELECT COUNT(*) AS totalContactRequests
+      FROM contact_messages
+      ${filters.contacts.where}`,
+      filters.contacts.params
+    ),
+    pool.query(
+      `SELECT
+        COUNT(*) AS totalCreditReports,
+        SUM(CASE WHEN credit_score IS NOT NULL AND credit_score <> '' THEN 1 ELSE 0 END) AS reportsWithScore
+      FROM credit_reports
+      ${filters.creditReports.where}`,
+      filters.creditReports.params
+    ),
+    pool.query(
+      `SELECT
+        COUNT(*) AS totalRepairRequests,
+        SUM(CASE WHEN payment_status = 'paid' THEN 1 ELSE 0 END) AS paidRepairRequests,
+        SUM(CASE WHEN repair_status IN ('submitted', 'analysis', 'in_progress') THEN 1 ELSE 0 END) AS openRepairRequests,
+        SUM(CASE WHEN repair_status IN ('resolved', 'closed') THEN 1 ELSE 0 END) AS closedRepairRequests
+      FROM cibil_repair_requests
+      ${filters.repairRequests.where}`,
+      filters.repairRequests.params
+    ),
+    pool.query(
+      `SELECT
+        COUNT(*) AS totalDisputes,
+        SUM(CASE WHEN status IN ('submitted', 'under_review') THEN 1 ELSE 0 END) AS openDisputes,
+        SUM(CASE WHEN status = 'resolved' THEN 1 ELSE 0 END) AS resolvedDisputes,
+        SUM(CASE WHEN status = 'rejected' THEN 1 ELSE 0 END) AS rejectedDisputes
+      FROM credit_disputes
+      ${filters.disputes.where}`,
+      filters.disputes.params
+    ),
+    pool.query(
+      `SELECT COUNT(*) AS totalDocuments
+      FROM credit_repair_documents
+      ${filters.documents.where}`,
+      filters.documents.params
+    ),
+    pool.query(
+      `SELECT
+        COUNT(*) AS totalNotifications,
+        SUM(CASE WHEN read_at IS NULL THEN 1 ELSE 0 END) AS unreadNotifications
+      FROM notifications
+      ${filters.notifications.where}`,
+      filters.notifications.params
     ),
     pool.query(
       `SELECT status AS label, COUNT(*) AS count
       FROM users
-      GROUP BY status`
+      ${filters.users.where}
+      GROUP BY status`,
+      filters.users.params
     ),
     pool.query(
       `SELECT
@@ -80,77 +230,133 @@ async function getDashboardCounts() {
         END AS label,
         COUNT(*) AS count
       FROM users
-      GROUP BY label`
+      ${filters.users.where}
+      GROUP BY label`,
+      filters.users.params
     ),
     pool.query(
       `SELECT subscription_status AS label, COUNT(*) AS count
       FROM users
-      GROUP BY subscription_status`
+      ${filters.users.where}
+      GROUP BY subscription_status`,
+      filters.users.params
     ),
     pool.query(
       `SELECT status AS label, COUNT(*) AS count
       FROM loan_applications
-      GROUP BY status`
+      ${filters.loans.where}
+      GROUP BY status`,
+      filters.loans.params
+    ),
+    pool.query(
+      `SELECT repair_status AS label, COUNT(*) AS count
+      FROM cibil_repair_requests
+      ${filters.repairRequests.where}
+      GROUP BY repair_status`,
+      filters.repairRequests.params
+    ),
+    pool.query(
+      `SELECT status AS label, COUNT(*) AS count
+      FROM credit_disputes
+      ${filters.disputes.where}
+      GROUP BY status`,
+      filters.disputes.params
     ),
     pool.query(
       `SELECT
-        DATE_FORMAT(months.monthStart, '%Y-%m') AS label,
-        COALESCE(users.count, 0) AS users,
-        COALESCE(messages.count, 0) AS messages,
-        COALESCE(loans.count, 0) AS loans
+        label,
+        SUM(users) AS users,
+        SUM(messages) AS messages,
+        SUM(loans) AS loans
       FROM (
-        SELECT DATE_FORMAT(CURRENT_DATE - INTERVAL 11 MONTH, '%Y-%m-01') AS monthStart
-        UNION ALL SELECT DATE_FORMAT(CURRENT_DATE - INTERVAL 10 MONTH, '%Y-%m-01')
-        UNION ALL SELECT DATE_FORMAT(CURRENT_DATE - INTERVAL 9 MONTH, '%Y-%m-01')
-        UNION ALL SELECT DATE_FORMAT(CURRENT_DATE - INTERVAL 8 MONTH, '%Y-%m-01')
-        UNION ALL SELECT DATE_FORMAT(CURRENT_DATE - INTERVAL 7 MONTH, '%Y-%m-01')
-        UNION ALL SELECT DATE_FORMAT(CURRENT_DATE - INTERVAL 6 MONTH, '%Y-%m-01')
-        UNION ALL SELECT DATE_FORMAT(CURRENT_DATE - INTERVAL 5 MONTH, '%Y-%m-01')
-        UNION ALL SELECT DATE_FORMAT(CURRENT_DATE - INTERVAL 4 MONTH, '%Y-%m-01')
-        UNION ALL SELECT DATE_FORMAT(CURRENT_DATE - INTERVAL 3 MONTH, '%Y-%m-01')
-        UNION ALL SELECT DATE_FORMAT(CURRENT_DATE - INTERVAL 2 MONTH, '%Y-%m-01')
-        UNION ALL SELECT DATE_FORMAT(CURRENT_DATE - INTERVAL 1 MONTH, '%Y-%m-01')
-        UNION ALL SELECT DATE_FORMAT(CURRENT_DATE, '%Y-%m-01')
-      ) months
-      LEFT JOIN (
-        SELECT DATE_FORMAT(created_at, '%Y-%m-01') AS monthStart, COUNT(*) AS count
+        SELECT DATE_FORMAT(created_at, '%Y-%m') AS label,
+          COUNT(*) AS users, 0 AS messages, 0 AS loans
         FROM users
-        WHERE created_at >= DATE_FORMAT(CURRENT_DATE - INTERVAL 11 MONTH, '%Y-%m-01')
-        GROUP BY monthStart
-      ) users ON users.monthStart = months.monthStart
-      LEFT JOIN (
-        SELECT DATE_FORMAT(created_at, '%Y-%m-01') AS monthStart, COUNT(*) AS count
+        ${monthlyFilter.where}
+        GROUP BY label
+        UNION ALL
+        SELECT DATE_FORMAT(created_at, '%Y-%m') AS label,
+          0 AS users, COUNT(*) AS messages, 0 AS loans
         FROM ai_prompt_messages
-        WHERE created_at >= DATE_FORMAT(CURRENT_DATE - INTERVAL 11 MONTH, '%Y-%m-01')
-        GROUP BY monthStart
-      ) messages ON messages.monthStart = months.monthStart
-      LEFT JOIN (
-        SELECT DATE_FORMAT(created_at, '%Y-%m-01') AS monthStart, COUNT(*) AS count
+        ${monthlyFilter.where}
+        GROUP BY label
+        UNION ALL
+        SELECT DATE_FORMAT(created_at, '%Y-%m') AS label,
+          0 AS users, 0 AS messages, COUNT(*) AS loans
         FROM loan_applications
-        WHERE created_at >= DATE_FORMAT(CURRENT_DATE - INTERVAL 11 MONTH, '%Y-%m-01')
-        GROUP BY monthStart
-      ) loans ON loans.monthStart = months.monthStart
-      ORDER BY months.monthStart`
+        ${monthlyFilter.where}
+        GROUP BY label
+      ) monthly
+      GROUP BY label
+      ORDER BY label`,
+      [
+        ...monthlyFilter.params,
+        ...monthlyFilter.params,
+        ...monthlyFilter.params
+      ]
     )
   ]);
   const totalUsers = Number(userCounts[0]?.totalUsers || 0);
   const totalMessages = Number(messageCounts[0]?.totalMessages || 0);
   const totalFeedback = Number(feedbackCounts[0]?.totalFeedback || 0);
   const totalLoans = Number(loanCounts[0]?.applied || 0);
+  const subscriptionRevenue = Number(Number(paymentCounts[0]?.amount || 0).toFixed(2));
+  const cibilRepairRevenue = Number(Number(repairPaymentCounts[0]?.amount || 0).toFixed(2));
+  const totalRevenue = Number((subscriptionRevenue + cibilRepairRevenue).toFixed(2));
+  const totalRepairRequests = Number(repairRequestCounts[0]?.totalRepairRequests || 0);
+  const totalDisputes = Number(disputeCounts[0]?.totalDisputes || 0);
 
   return {
+    filters: {
+      from: from || null,
+      totime: totime || null
+    },
     totalUsers,
     newUsers: Number(userCounts[0]?.newUsers || 0),
     subscriptions: Number(userCounts[0]?.subscriptions || 0),
-    amount: Number(paymentCounts[0]?.amount || 0),
+    amount: totalRevenue,
+    revenue: {
+      total: totalRevenue,
+      subscriptions: subscriptionRevenue,
+      cibilRepair: cibilRepairRevenue
+    },
     upcomingOverdues: Number(userCounts[0]?.upcomingOverdues || 0),
     totalMessages,
     totalFeedback,
+    totalContactRequests: Number(contactCounts[0]?.totalContactRequests || 0),
+    totalCreditReports: Number(creditReportCounts[0]?.totalCreditReports || 0),
+    reportsWithScore: Number(creditReportCounts[0]?.reportsWithScore || 0),
+    totalDocuments: Number(documentCounts[0]?.totalDocuments || 0),
+    totalNotifications: Number(notificationCounts[0]?.totalNotifications || 0),
+    unreadNotifications: Number(notificationCounts[0]?.unreadNotifications || 0),
+    employees: {
+      total: Number(employeeCounts[0]?.totalEmployees || 0),
+      active: Number(employeeCounts[0]?.activeEmployees || 0),
+      inactive: Number(employeeCounts[0]?.inactiveEmployees || 0),
+      suspended: Number(employeeCounts[0]?.suspendedEmployees || 0)
+    },
+    roles: {
+      total: Number(roleCounts[0]?.totalRoles || 0),
+      active: Number(roleCounts[0]?.activeRoles || 0),
+      inactive: Number(roleCounts[0]?.inactiveRoles || 0)
+    },
     loans: {
       applied: totalLoans,
       approved: Number(loanCounts[0]?.approved || 0),
       rejected: Number(loanCounts[0]?.rejected || 0),
       pending: Number(loanCounts[0]?.pending || 0)
+    },
+    cibilRepair: {
+      total: totalRepairRequests,
+      paid: Number(repairRequestCounts[0]?.paidRepairRequests || 0),
+      open: Number(repairRequestCounts[0]?.openRepairRequests || 0),
+      closed: Number(repairRequestCounts[0]?.closedRepairRequests || 0)
+    },
+    disputes: {
+      total: totalDisputes,
+      open: Number(disputeCounts[0]?.openDisputes || 0),
+      resolved: Number(disputeCounts[0]?.resolvedDisputes || 0),
+      rejected: Number(disputeCounts[0]?.rejectedDisputes || 0)
     },
     graphs: {
       usersByStatus: mapCountRows(userStatusRows, totalUsers),
@@ -158,6 +364,8 @@ async function getDashboardCounts() {
       subscriptionsByStatus: mapCountRows(subscriptionStatusRows, totalUsers),
       feedbackByRating: mapCountRows(feedbackRatingRows, totalFeedback),
       loansByStatus: mapCountRows(loanStatusRows, totalLoans),
+      cibilRepairByStatus: mapCountRows(repairStatusRows, totalRepairRequests),
+      disputesByStatus: mapCountRows(disputeStatusRows, totalDisputes),
       monthlyRecords: monthlyRows.map((row) => ({
         label: row.label,
         users: Number(row.users || 0),
@@ -210,6 +418,7 @@ function mapAdminUser(row) {
 
 function buildAdminUsersWhere(options = {}) {
   const search = String(options.search || "").trim();
+  const status = String(options.status || "").trim();
   const from = String(options.from || "").trim();
   const totime = String(options.totime || "").trim();
   const conditions = [];
@@ -226,6 +435,11 @@ function buildAdminUsersWhere(options = {}) {
       OR u.email LIKE ?
     )`);
     params.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
+  }
+
+  if (status) {
+    conditions.push("u.status = ?");
+    params.push(status);
   }
 
   if (from) {

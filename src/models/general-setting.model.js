@@ -7,6 +7,7 @@ function mapGeneralSettings(row) {
     mobileNumber: row?.mobileNumber || "",
     whatsappNumber: row?.whatsappNumber || "",
     selectedLanguage: row?.selectedLanguage || "English",
+    address: row?.address || "",
     updatedAt: row?.updatedAt
   };
 }
@@ -19,6 +20,7 @@ async function getGeneralSettings() {
       mobile_number AS mobileNumber,
       whatsapp_number AS whatsappNumber,
       selected_language AS selectedLanguage,
+      address,
       updated_at AS updatedAt
     FROM general_settings
     WHERE id = 1`
@@ -35,22 +37,25 @@ async function updateGeneralSettings(values) {
       email,
       mobile_number,
       whatsapp_number,
-      selected_language
+      selected_language,
+      address
     )
-    VALUES (1, ?, ?, ?, ?, ?)
+    VALUES (1, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
       website = VALUES(website),
       email = VALUES(email),
       mobile_number = VALUES(mobile_number),
       whatsapp_number = VALUES(whatsapp_number),
       selected_language = VALUES(selected_language),
+      address = VALUES(address),
       updated_at = NOW()`,
     [
       values.website,
       values.email,
       values.mobileNumber,
       values.whatsappNumber,
-      values.selectedLanguage
+      values.selectedLanguage,
+      values.address
     ]
   );
 

@@ -26,9 +26,12 @@ const subscriptionStatuses = new Set([
 ]);
 const loanStatuses = new Set(["submitted", "in_review", "approved", "rejected"]);
 
-async function getAdminDashboardCounts(_req, res, next) {
+async function getAdminDashboardCounts(req, res, next) {
   try {
-    const counts = await getDashboardCounts();
+    const counts = await getDashboardCounts({
+      from: req.query.from,
+      totime: req.query.totime
+    });
 
     return res.status(200).json({
       status: "success",
@@ -45,6 +48,7 @@ async function getAdminUsers(req, res, next) {
       page: req.query.page,
       limit: req.query.limit,
       search: req.query.search,
+      status: req.query.status,
       from: req.query.from,
       totime: req.query.totime
     });

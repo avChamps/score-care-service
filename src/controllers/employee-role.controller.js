@@ -16,12 +16,15 @@ const defaultMenuAccess = [
   { menuName: "General", childMenuName: "FAQ", permissions: ["create", "read", "update", "delete"] },
   { menuName: "User management", childMenuName: "Users", permissions: ["read", "export"] },
   { menuName: "Employee management", childMenuName: "Employees", permissions: ["create", "read", "update", "delete"] },
+  { menuName: "Employee management", childMenuName: "Roles", permissions: ["create", "read", "update", "delete"] },
   { menuName: "Subscriptions", childMenuName: "Subscriptions", permissions: ["read", "update"] },
   { menuName: "Plans & Benefits", childMenuName: "Basic plan", permissions: [] },
   { menuName: "Plans & Benefits", childMenuName: "Repair service", permissions: ["create", "read", "update", "delete"] },
   { menuName: "Chats", childMenuName: null, permissions: ["read"] },
   { menuName: "Feedback", childMenuName: null, permissions: ["read"] },
-  { menuName: "Contact Us", childMenuName: null, permissions: ["read"] }
+  { menuName: "Contact Us", childMenuName: null, permissions: ["read"] },
+  { menuName: "Reports", childMenuName: "Downloads", permissions: ["read", "export"] },
+  { menuName: "Reports", childMenuName: "Download CIBIL", permissions: ["read", "create"] }
 ];
 const roleStatuses = new Set(["active", "inactive"]);
 
