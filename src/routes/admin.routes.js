@@ -67,6 +67,7 @@ const {
 } = require("../controllers/loan.controller");
 const {
   downloadAdminCibilReportByUserId,
+  downloadManualCibilReport,
   getAdminCreditReportDownloads
 } = require("../controllers/credit-report.controller");
 const {
@@ -83,6 +84,12 @@ router.get(
   requireAuth,
   requireAdmin,
   downloadAdminCibilReportByUserId
+);
+router.post(
+  "/download-manual-cibil-report",
+  requireAuth,
+  requireAdmin,
+  downloadManualCibilReport
 );
 router.get("/subscription-plans", requireAuth, requireAdmin, getAllSubscriptionPlans);
 router.post("/subscription-plans", requireAuth, requireAdmin, createPlan);

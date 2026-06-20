@@ -12,6 +12,7 @@ const {
   fetchManualCreditReportPdf,
 } = require("../services/surepass.service");
 const {
+  createManualCreditReportDownload,
   findCibilReportByUserId,
   findCrifReportByUserId,
   findCrifScoreByUserId,
@@ -2158,6 +2159,48 @@ async function getAdminCreditReportDownloads(req, res, next) {
   }
 }
 
+async function downloadManualCibilReport(req, res, next) {
+  try {
+    const { errors, payload, type } = buildManualCreditReportRequest(req.body);
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        status: "error",
+        errors
+      });
+    }
+
+    const reportResponse = await fetchManualCreditReportPdf(type, payload);
+    const reportData = reportResponse.data || {};
+
+    if (!reportData.credit_report_link) {
+      return res.status(502).json({
+        status: "error",
+        message: `${type.toUpperCase()} report download link was not returned`
+      });
+    }
+
+    const pdfBuffer = await downloadPdfBufferFromLink(reportData.credit_report_link);
+
+    await createManualCreditReportDownload({
+      type,
+      requestPayload: payload,
+      providerResponse: reportResponse,
+      pdfBuffer,
+      downloadedByUserId: req.auth.internalUserId,
+      downloadedByEmployeeId: req.auth.internalEmployeeId
+    });
+
+    return sendPdfBuffer(
+      res,
+      { clientId: reportData.client_id || `${type}-credit-report` },
+      pdfBuffer
+    );
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function downloadAdminCibilReportByUserId(req, res, next) {
   try {
     const user = await findUserByPublicId(req.params.userId);
@@ -2201,6 +2244,7 @@ async function downloadAdminCibilReportByUserId(req, res, next) {
 module.exports = {
   downloadAdminCibilReportByUserId,
   downloadCibilCreditReport,
+  downloadManualCibilReport,
   getAdminCreditReportDownloads,
   getCreditReportDownloads,
   getCrifCreditReport,

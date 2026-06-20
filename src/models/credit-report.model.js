@@ -1,3 +1,5 @@
+const { randomUUID } = require("crypto");
+
 const { pool } = require("../config/db");
 
 function parseJson(value) {
@@ -377,7 +379,65 @@ async function listAdminCreditReportDownloads(options = {}) {
   };
 }
 
+async function createManualCreditReportDownload(values) {
+  const reportData = values.providerResponse.data || {};
+  const publicId = randomUUID();
+
+  await pool.query(
+    `INSERT INTO manual_credit_report_downloads (
+      public_id,
+      bureau_type,
+      client_id,
+      name,
+      first_name,
+      last_name,
+      mobile,
+      pan,
+      gender,
+      credit_score,
+      credit_report,
+      credit_report_link,
+      credit_report_base64,
+      request_payload,
+      provider_response,
+      provider_status_code,
+      provider_message,
+      provider_message_code,
+      downloaded_by_user_id,
+      downloaded_by_employee_id
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      publicId,
+      values.type,
+      reportData.client_id,
+      reportData.name || null,
+      reportData.first_name || null,
+      reportData.last_name || null,
+      reportData.mobile || values.requestPayload.mobile,
+      reportData.pan || values.requestPayload.pan,
+      reportData.gender || values.requestPayload.gender || null,
+      reportData.credit_score || null,
+      reportData.credit_report
+        ? JSON.stringify(reportData.credit_report)
+        : null,
+      reportData.credit_report_link,
+      values.pdfBuffer.toString("base64"),
+      JSON.stringify(values.requestPayload),
+      JSON.stringify(values.providerResponse),
+      values.providerResponse.status_code || null,
+      values.providerResponse.message || null,
+      values.providerResponse.message_code || null,
+      values.downloadedByUserId || null,
+      values.downloadedByEmployeeId || null
+    ]
+  );
+
+  return publicId;
+}
+
 module.exports = {
+  createManualCreditReportDownload,
   findCibilReportByUserId,
   findCrifReportByUserId,
   findCrifScoreByUserId,
