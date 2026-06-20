@@ -17,6 +17,9 @@ const {
   updateCibilRepairRequest
 } = require("../models/cibil-repair-request.model");
 const {
+  listCreditRepairDocumentsByUserId
+} = require("../models/credit-repair-document.model");
+const {
   countUnreadNotificationsByUserPublicId,
   createCibilRepairRequestCreatedNotification,
   createCibilRepairRequestUpdatedNotification,
@@ -766,7 +769,10 @@ async function createMyCibilRepairPaymentOrder(req, res, next) {
 
 async function getMyCibilRepairRequest(req, res, next) {
   try {
-    const requests = await listCibilRepairRequestsByUserId(req.auth.internalUserId);
+    const [requests, documents] = await Promise.all([
+      listCibilRepairRequestsByUserId(req.auth.internalUserId),
+      listCreditRepairDocumentsByUserId(req.auth.internalUserId)
+    ]);
 
     return res.status(200).json({
       status: "success",
@@ -777,7 +783,13 @@ async function getMyCibilRepairRequest(req, res, next) {
         resolvedDisputes: requests.filter(
           (request) => request.repairStatus === "resolved"
         ).length,
-        requests
+        requests,
+        accounts: documents.map((document) => ({
+          accountNumber: document.accountNumber,
+          accountType: document.accountType,
+          subscriberName: document.bankName,
+          issueType: document.issueType
+        }))
       }
     });
   } catch (error) {
