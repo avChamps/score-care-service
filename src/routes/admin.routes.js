@@ -68,6 +68,7 @@ const {
 const {
   downloadAdminCibilReportByUserId,
   downloadManualCibilReport,
+  getAdminCreditBureauApiHits,
   getAdminCreditReportDownloads,
   getAdminManualCreditReportDownloads
 } = require("../controllers/credit-report.controller");
@@ -79,6 +80,12 @@ const {
 const router = express.Router();
 
 router.get("/dashboard-counts", requireAuth, requireAdmin, getAdminDashboardCounts);
+router.get(
+  "/credit-bureau-api-hits",
+  requireAuth,
+  requireAdmin,
+  getAdminCreditBureauApiHits
+);
 router.get("/cibil-report-downloads", requireAuth, requireAdmin, getAdminCreditReportDownloads);
 router.get(
   "/manual-credit-report-downloads",

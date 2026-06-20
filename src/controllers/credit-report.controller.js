@@ -30,6 +30,9 @@ const {
   findUserById,
   findUserByPublicId
 } = require("../models/user.model");
+const {
+  listCreditBureauApiHits
+} = require("../models/credit-bureau-api-hit.model");
 
 const mobilePattern = /^[6-9]\d{9}$/;
 const panPattern = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
@@ -1884,7 +1887,9 @@ async function getCibilCreditReport(req, res, next) {
       });
     }
 
-    const report = await fetchCibilCreditReport(value);
+    const report = await fetchCibilCreditReport(value, {
+      requestedByUserId: internalUserId
+    });
     let savedCibilReport = await saveCibilReport(internalUserId, report);
 
     try {
@@ -1957,7 +1962,9 @@ async function getCrifCreditScore(req, res, next) {
       });
     }
 
-    const report = await fetchCrifCreditScore(value);
+    const report = await fetchCrifCreditScore(value, {
+      requestedByUserId: internalUserId
+    });
 
     const savedCrifScore = await saveCrifScore(internalUserId, report);
 
@@ -2032,7 +2039,9 @@ async function getCrifCreditReport(req, res, next) {
       });
     }
 
-    const report = await fetchCrifCreditReport(value);
+    const report = await fetchCrifCreditReport(value, {
+      requestedByUserId: internalUserId
+    });
     const savedCrifReport = await saveCrifReport(internalUserId, report);
 
     return res.status(200).json({
@@ -2180,6 +2189,29 @@ async function getAdminManualCreditReportDownloads(req, res, next) {
   }
 }
 
+async function getAdminCreditBureauApiHits(req, res, next) {
+  try {
+    const data = await listCreditBureauApiHits({
+      page: req.query.page,
+      limit: req.query.limit,
+      search: req.query.search,
+      bureauType: req.query.bureauType,
+      operationType: req.query.operationType,
+      status: req.query.status,
+      from: req.query.from,
+      totime: req.query.totime,
+      includePayload: req.query.includePayload
+    });
+
+    return res.status(200).json({
+      status: "success",
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 async function downloadManualCibilReport(req, res, next) {
   try {
     const { errors, payload, type } = buildManualCreditReportRequest(req.body);
@@ -2191,7 +2223,10 @@ async function downloadManualCibilReport(req, res, next) {
       });
     }
 
-    const reportResponse = await fetchManualCreditReportPdf(type, payload);
+    const reportResponse = await fetchManualCreditReportPdf(type, payload, {
+      requestedByUserId: req.auth.internalUserId,
+      requestedByEmployeeId: req.auth.internalEmployeeId
+    });
     const reportData = reportResponse.data || {};
 
     if (!reportData.credit_report_link) {
@@ -2266,6 +2301,7 @@ module.exports = {
   downloadAdminCibilReportByUserId,
   downloadCibilCreditReport,
   downloadManualCibilReport,
+  getAdminCreditBureauApiHits,
   getAdminCreditReportDownloads,
   getAdminManualCreditReportDownloads,
   getCreditReportDownloads,
