@@ -8,6 +8,8 @@ function buildPayload(notification) {
   return {
     title: notification.title,
     body: notification.message,
+    imageUrl: notification.data?.imageUrl,
+    screen: notification.data?.screen,
     data: {
       notificationId: notification.id,
       type: notification.type,

@@ -16,9 +16,11 @@ const {
   markAllAdminNotificationsRead
 } = require("../models/admin-notification.model");
 const {
-  sendToMultipleUsers,
   sendToUser
 } = require("../services/notification.service");
+const {
+  sendStoredNotificationToUser
+} = require("../services/mobile-notification.service");
 
 function normalizeString(value) {
   return String(value || "").trim();
@@ -67,6 +69,18 @@ function validateAdminAppNotificationPayload(body) {
       data: normalizeObject(body.data)
     }
   };
+}
+
+function summarizePushResults(results) {
+  return results.reduce((summary, result) => ({
+    successCount: summary.successCount + Number(result?.successCount || 0),
+    failureCount: summary.failureCount + Number(result?.failureCount || 0),
+    disabledCount: summary.disabledCount + Number(result?.disabledCount || 0)
+  }), {
+    successCount: 0,
+    failureCount: 0,
+    disabledCount: 0
+  });
 }
 
 async function getMyNotifications(req, res, next) {
@@ -221,20 +235,11 @@ async function sendAdminAppNotification(req, res, next) {
       ...value,
       batchId
     });
-    const push = await sendToMultipleUsers(
-      users.map((user) => user.userId),
-      {
-        title: value.title,
-        body: value.message,
-        imageUrl: value.imageUrl,
-        screen: value.screen,
-        data: {
-          ...value.data,
-          type: "admin_app_notification",
-          batchId
-        }
-      }
-    );
+    const push = summarizePushResults(await Promise.all(
+      notifications.map((notification, index) => (
+        sendStoredNotificationToUser(users[index]?.userId, notification)
+      ))
+    ));
 
     return res.status(201).json({
       status: "success",

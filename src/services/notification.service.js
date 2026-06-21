@@ -56,25 +56,36 @@ function buildMessage(token, payload = {}) {
       title: payload.title || "",
       body: payload.body || ""
     },
-    data: normalizeData(payload.data, payload.screen)
+    data: normalizeData({
+      title: payload.title || "",
+      body: payload.body || "",
+      ...payload.data
+    }, payload.screen),
+    android: {
+      priority: "high",
+      notification: {
+        priority: "high",
+        sound: "default"
+      }
+    },
+    apns: {
+      headers: {
+        "apns-priority": "10"
+      },
+      payload: {
+        aps: {
+          sound: "default"
+        }
+      }
+    }
   };
 
   if (payload.imageUrl) {
     message.notification.imageUrl = payload.imageUrl;
-    message.android = {
-      notification: {
-        imageUrl: payload.imageUrl
-      }
-    };
-    message.apns = {
-      payload: {
-        aps: {
-          "mutable-content": 1
-        }
-      },
-      fcmOptions: {
-        imageUrl: payload.imageUrl
-      }
+    message.android.notification.imageUrl = payload.imageUrl;
+    message.apns.payload.aps["mutable-content"] = 1;
+    message.apns.fcmOptions = {
+      imageUrl: payload.imageUrl
     };
   }
 

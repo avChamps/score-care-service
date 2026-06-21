@@ -435,7 +435,9 @@ async function getAdminLoginEvents(req, res, next) {
     const data = await listEmployeeLoginEvents({
       page: req.query.page,
       limit: req.query.limit,
-      search: req.query.search
+      search: req.query.search,
+      from: req.query.from || req.query.startDate,
+      totime: req.query.totime || req.query.endDate
     });
 
     return res.status(200).json({

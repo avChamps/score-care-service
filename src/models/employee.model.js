@@ -382,6 +382,8 @@ async function listEmployeeLoginEvents(options = {}) {
   const limit = Math.min(Math.max(Number(options.limit) || 20, 1), 100);
   const offset = (page - 1) * limit;
   const search = String(options.search || "").trim();
+  const from = String(options.from || "").trim();
+  const totime = String(options.totime || "").trim();
   const conditions = [];
   const params = [];
 
@@ -394,6 +396,16 @@ async function listEmployeeLoginEvents(options = {}) {
     )`);
     const term = `%${search}%`;
     params.push(term, term, term, term);
+  }
+
+  if (from) {
+    conditions.push("DATE(ele.logged_in_at) >= ?");
+    params.push(from);
+  }
+
+  if (totime) {
+    conditions.push("DATE(ele.logged_in_at) <= ?");
+    params.push(totime);
   }
 
   const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
