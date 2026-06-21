@@ -34,6 +34,7 @@ function mapDispute(row) {
     errorType: row.errorType,
     bureaus: parseJson(row.bureaus, []),
     additionalDetails: row.additionalDetails,
+    remarks: row.remarks,
     documents: parseJson(row.documents, {}),
     status: row.status,
     progressStep: Number(row.progressStep),
@@ -55,6 +56,7 @@ function disputeSelect() {
     error_type AS errorType,
     bureaus,
     additional_details AS additionalDetails,
+    remarks,
     documents,
     status,
     progress_step AS progressStep,
@@ -141,8 +143,58 @@ async function getDisputeSummaryByUserId(userId) {
   };
 }
 
+async function findDisputeByPublicId(publicId) {
+  const [rows] = await pool.query(
+    `${disputeSelect()}
+    WHERE public_id = ?
+    LIMIT 1`,
+    [publicId]
+  );
+
+  return mapDispute(rows[0]);
+}
+
+async function listDisputes() {
+  const [rows] = await pool.query(
+    `${disputeSelect()}
+    ORDER BY submitted_at DESC, id DESC`
+  );
+
+  return rows.map(mapDispute);
+}
+
+async function updateDisputeByPublicId(publicId, values) {
+  const entries = Object.entries({
+    status: values.status,
+    remarks: values.remarks,
+    resolved_at:
+      values.status === undefined
+        ? undefined
+        : values.status === "resolved"
+          ? new Date()
+          : null
+  }).filter(([, value]) => value !== undefined);
+  const setClause = entries.map(([column]) => `${column} = ?`).join(", ");
+  const [result] = await pool.query(
+    `UPDATE credit_disputes
+    SET ${setClause},
+      updated_at = NOW()
+    WHERE public_id = ?`,
+    [...entries.map(([, value]) => value), publicId]
+  );
+
+  if (result.affectedRows === 0) {
+    return null;
+  }
+
+  return findDisputeByPublicId(publicId);
+}
+
 module.exports = {
   createDispute,
+  findDisputeByPublicId,
   getDisputeSummaryByUserId,
-  listDisputesByUserId
+  listDisputes,
+  listDisputesByUserId,
+  updateDisputeByPublicId
 };

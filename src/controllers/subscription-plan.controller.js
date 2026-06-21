@@ -23,6 +23,8 @@ const {
   verifyRazorpayWebhookSignature
 } = require("../services/razorpay.service");
 
+const basicPlanPublicId = "scorecare-basic-monthly";
+
 async function getSubscriptionPlans(_req, res, next) {
   try {
     const plans = await listActiveSubscriptionPlans();
@@ -46,6 +48,21 @@ async function getAllSubscriptionPlans(_req, res, next) {
       status: "success",
       data: {
         plans
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getAdminBasicPlan(_req, res, next) {
+  try {
+    const plan = await findSubscriptionPlanByPublicId(basicPlanPublicId);
+
+    return res.status(200).json({
+      status: "success",
+      data: {
+        plan
       }
     });
   } catch (error) {
@@ -91,6 +108,33 @@ function normalizeStringArray(value) {
   }
 
   return value.map((item) => normalizeString(item)).filter(Boolean);
+}
+
+function normalizeBenefits(value) {
+  if (value === undefined) {
+    return undefined;
+  }
+
+  if (!Array.isArray(value)) {
+    return null;
+  }
+
+  return value
+    .map((item) => {
+      if (item && typeof item === "object") {
+        return {
+          title: normalizeString(item.title),
+          description: normalizeString(item.description)
+        };
+      }
+
+      return normalizeString(item);
+    })
+    .filter((item) =>
+      typeof item === "string"
+        ? Boolean(item)
+        : Boolean(item.title || item.description)
+    );
 }
 
 function normalizeComparisonBenefits(value) {
@@ -167,6 +211,16 @@ function validateSubscriptionPlanPayload(body, { isCreate = false } = {}) {
     errors.push("amount is required");
   }
 
+  if (Object.prototype.hasOwnProperty.call(body, "gstPercentage")) {
+    value.gstPercentage = Number(body.gstPercentage);
+
+    if (!Number.isFinite(value.gstPercentage) || value.gstPercentage < 0) {
+      errors.push("gstPercentage must be a valid non-negative number");
+    }
+  } else if (isCreate) {
+    value.gstPercentage = 0;
+  }
+
   if (Object.prototype.hasOwnProperty.call(body, "razorpayPlanId")) {
     value.razorpayPlanId = normalizeNullableString(body.razorpayPlanId);
   } else if (isCreate) {
@@ -208,7 +262,7 @@ function validateSubscriptionPlanPayload(body, { isCreate = false } = {}) {
   }
 
   if (Object.prototype.hasOwnProperty.call(body, "benefits")) {
-    value.benefits = normalizeStringArray(body.benefits);
+    value.benefits = normalizeBenefits(body.benefits);
 
     if (value.benefits === null) {
       errors.push("benefits must be an array");
@@ -526,12 +580,58 @@ async function updateSubscriptionPlan(req, res, next) {
   }
 }
 
+async function saveAdminBasicPlan(req, res, next) {
+  try {
+    const existingPlan = await findSubscriptionPlanByPublicId(basicPlanPublicId);
+    const payload = existingPlan
+      ? req.body
+      : {
+          ...req.body,
+          publicId: basicPlanPublicId,
+          planName: req.body.planName || "Basic"
+        };
+    const { errors, value } = validateSubscriptionPlanPayload(payload, {
+      isCreate: !existingPlan
+    });
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        status: "error",
+        errors
+      });
+    }
+
+    const plan = existingPlan
+      ? await updateSubscriptionPlanByPublicId(basicPlanPublicId, value)
+      : await createSubscriptionPlan(value);
+
+    return res.status(200).json({
+      status: "success",
+      message: "Basic subscription plan updated successfully",
+      data: {
+        plan
+      }
+    });
+  } catch (error) {
+    if (error.code === "ER_DUP_ENTRY") {
+      return res.status(409).json({
+        status: "error",
+        message: "Subscription plan already exists"
+      });
+    }
+
+    next(error);
+  }
+}
+
 module.exports = {
   confirmGatewaySubscriptionPayment,
   createPlan,
   createGatewaySubscription,
+  getAdminBasicPlan,
   getAllSubscriptionPlans,
   getSubscriptionPlans,
   handleRazorpaySubscriptionWebhook,
+  saveAdminBasicPlan,
   updateSubscriptionPlan
 };

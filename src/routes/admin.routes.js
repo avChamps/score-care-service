@@ -12,7 +12,9 @@ const {
 } = require("../controllers/admin.controller");
 const {
   createPlan,
+  getAdminBasicPlan,
   getAllSubscriptionPlans,
+  saveAdminBasicPlan,
   updateSubscriptionPlan
 } = require("../controllers/subscription-plan.controller");
 const {
@@ -40,6 +42,10 @@ const {
 const {
   getAdminContactRequests
 } = require("../controllers/contact.controller");
+const {
+  getAdminDisputes,
+  updateAdminDispute
+} = require("../controllers/dispute.controller");
 const {
   getAdminSentAppNotifications,
   sendAdminAppNotification
@@ -107,8 +113,12 @@ router.post(
 );
 router.get("/subscription-plans", requireAuth, requireAdmin, getAllSubscriptionPlans);
 router.post("/subscription-plans", requireAuth, requireAdmin, createPlan);
+router.get("/basic-plan", requireAuth, requireAdmin, getAdminBasicPlan);
+router.post("/basic-plan", requireAuth, requireAdmin, saveAdminBasicPlan);
 router.get("/feedback", requireAuth, requireAdmin, getAllFeedback);
 router.get("/contact-requests", requireAuth, requireAdmin, getAdminContactRequests);
+router.get("/disputes", requireAuth, requireAdmin, getAdminDisputes);
+router.patch("/disputes/:publicId", requireAuth, requireAdmin, updateAdminDispute);
 router.get("/app-notifications", requireAuth, requireAdmin, getAdminSentAppNotifications);
 router.post("/app-notifications", requireAuth, requireAdmin, sendAdminAppNotification);
 router.get("/employees", requireAuth, requireAdmin, getAdminEmployees);

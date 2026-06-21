@@ -1,7 +1,10 @@
 const {
   createDispute,
+  findDisputeByPublicId,
   getDisputeSummaryByUserId,
-  listDisputesByUserId
+  listDisputes,
+  listDisputesByUserId,
+  updateDisputeByPublicId
 } = require("../models/dispute.model");
 const {
   createCreditDisputeSubmittedNotification
@@ -167,7 +170,81 @@ async function getMyDisputes(req, res, next) {
   }
 }
 
+async function getAdminDisputes(_req, res, next) {
+  try {
+    const disputes = await listDisputes();
+
+    return res.status(200).json({
+      status: "success",
+      data: {
+        disputes
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function updateAdminDispute(req, res, next) {
+  try {
+    const allowedStatuses = new Set([
+      "submitted",
+      "under_review",
+      "resolved",
+      "rejected"
+    ]);
+    const status = req.body.status === undefined
+      ? undefined
+      : normalizeString(req.body.status);
+    const remarks = req.body.remarks === undefined
+      ? undefined
+      : normalizeNullableString(req.body.remarks);
+    const errors = [];
+
+    if (status !== undefined && !allowedStatuses.has(status)) {
+      errors.push("Valid status is required");
+    }
+
+    if (status === undefined && remarks === undefined) {
+      errors.push("status or remarks is required");
+    }
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        status: "error",
+        errors
+      });
+    }
+
+    const existingDispute = await findDisputeByPublicId(req.params.publicId);
+
+    if (!existingDispute) {
+      return res.status(404).json({
+        status: "error",
+        message: "Dispute not found"
+      });
+    }
+
+    const dispute = await updateDisputeByPublicId(req.params.publicId, {
+      status,
+      remarks
+    });
+
+    return res.status(200).json({
+      status: "success",
+      message: "Dispute updated successfully",
+      data: {
+        dispute
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
+  getAdminDisputes,
   getMyDisputes,
-  submitDispute
+  submitDispute,
+  updateAdminDispute
 };
