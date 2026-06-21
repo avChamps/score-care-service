@@ -27,6 +27,15 @@ function mapCibilRepairRequest(row) {
     userName: row.userName,
     email: row.email,
     mobileNumber: row.mobileNumber,
+    ...(row.totalRepairRequests === undefined
+      ? {}
+      : {
+          activeRepairRequests: Number(row.activeRepairRequests || 0),
+          resolvedRepairRequests: Number(row.resolvedRepairRequests || 0),
+          closedRepairRequests: Number(row.closedRepairRequests || 0),
+          cancelledRepairRequests: Number(row.cancelledRepairRequests || 0),
+          totalRepairRequests: Number(row.totalRepairRequests || 0)
+        }),
     planId: row.planPublicId,
     planPublicId: row.planPublicId,
     planName: row.planName,
@@ -217,6 +226,11 @@ async function listCibilRepairRequests(options = {}) {
       u.full_name AS userName,
       u.email,
       u.mobile_number AS mobileNumber,
+      userRepairSummary.activeRepairRequests,
+      userRepairSummary.resolvedRepairRequests,
+      userRepairSummary.closedRepairRequests,
+      userRepairSummary.cancelledRepairRequests,
+      userRepairSummary.totalRepairRequests,
       crr.plan_public_id AS planPublicId,
       crr.plan_name AS planName,
       crr.amount,
@@ -235,6 +249,20 @@ async function listCibilRepairRequests(options = {}) {
       crr.updated_at AS updatedAt
     FROM cibil_repair_requests crr
     INNER JOIN users u ON u.id = crr.user_id
+    LEFT JOIN (
+      SELECT
+        user_id,
+        SUM(CASE
+          WHEN repair_status IN ('upload_document', 'submitted', 'analysis', 'in_progress')
+          THEN 1 ELSE 0
+        END) AS activeRepairRequests,
+        SUM(CASE WHEN repair_status = 'resolved' THEN 1 ELSE 0 END) AS resolvedRepairRequests,
+        SUM(CASE WHEN repair_status = 'closed' THEN 1 ELSE 0 END) AS closedRepairRequests,
+        SUM(CASE WHEN repair_status = 'cancelled' THEN 1 ELSE 0 END) AS cancelledRepairRequests,
+        COUNT(*) AS totalRepairRequests
+      FROM cibil_repair_requests
+      GROUP BY user_id
+    ) userRepairSummary ON userRepairSummary.user_id = crr.user_id
     ${where}
     ORDER BY crr.created_at DESC, crr.id DESC
     LIMIT ? OFFSET ?`,
