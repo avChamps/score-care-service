@@ -40,9 +40,10 @@ async function updateGeneralSettings(values) {
       mobile_number,
       whatsapp_number,
       selected_language,
-      address
+      address,
+      prompt_message
     )
-    VALUES (1, ?, ?, ?, ?, ?, ?)
+    VALUES (1, ?, ?, ?, ?, ?, ?, ?)
     ON DUPLICATE KEY UPDATE
       website = VALUES(website),
       email = VALUES(email),
@@ -50,6 +51,7 @@ async function updateGeneralSettings(values) {
       whatsapp_number = VALUES(whatsapp_number),
       selected_language = VALUES(selected_language),
       address = VALUES(address),
+      prompt_message = VALUES(prompt_message),
       updated_at = NOW()`,
     [
       values.website,
@@ -57,7 +59,8 @@ async function updateGeneralSettings(values) {
       values.mobileNumber,
       values.whatsappNumber,
       values.selectedLanguage,
-      values.address
+      values.address,
+      values.promptMessage
     ]
   );
 

@@ -124,7 +124,8 @@ function validateGeneralSettingsPayload(body) {
     mobileNumber: normalizeString(body.mobileNumber),
     whatsappNumber: normalizeString(body.whatsappNumber),
     selectedLanguage: normalizeString(body.selectedLanguage) || "English",
-    address: normalizeString(body.address)
+    address: normalizeString(body.address),
+    promptMessage: normalizeString(body.prompt_message || body.promptMessage)
   };
 
   if (!value.website) {
