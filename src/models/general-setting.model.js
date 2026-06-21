@@ -8,6 +8,7 @@ function mapGeneralSettings(row) {
     whatsappNumber: row?.whatsappNumber || "",
     selectedLanguage: row?.selectedLanguage || "English",
     address: row?.address || "",
+    prompt_message: row?.promptMessage || "",
     updatedAt: row?.updatedAt
   };
 }
@@ -21,6 +22,7 @@ async function getGeneralSettings() {
       whatsapp_number AS whatsappNumber,
       selected_language AS selectedLanguage,
       address,
+      prompt_message AS promptMessage,
       updated_at AS updatedAt
     FROM general_settings
     WHERE id = 1`
