@@ -57,6 +57,7 @@ app.use("/cibil-repair-content", cibilRepairContentRoutes);
 app.use("/contact", contactRoutes);
 app.use("/credit-reports", creditReportRoutes);
 app.use("/api/disputes", disputeRoutes);
+app.use("/disputes", disputeRoutes);
 app.use("/api/credit-repair", creditRepairDocumentRoutes);
 app.use("/credit-repair", creditRepairDocumentRoutes);
 app.use("/faqs", faqRoutes);
