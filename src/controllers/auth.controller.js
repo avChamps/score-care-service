@@ -8,9 +8,12 @@ const {
 } = require("../models/user.model");
 const {
   consumeEmployeeAuthenticatorStep,
+  createEmployeeLoginEvent,
   findActiveEmployeeByMobileNumber,
   findEmployeeByPublicId,
   getEmployeeAuthenticator,
+  listEmployeeLoginEvents,
+  markEmployeeLoginEventLoggedOut,
   setEmployeeAuthenticatorSecret
 } = require("../models/employee.model");
 const {
@@ -332,11 +335,20 @@ async function verifyAdminAuthenticator(req, res, next) {
 
     employee = await findEmployeeByPublicId(employee.publicId);
     const menuAccess = await listMenuAccessByEmployeePublicId(employee.publicId);
+    const loginEventId = await createEmployeeLoginEvent(employee, {
+      loginMethod: "otp_totp",
+      loginStatus: "success",
+      ipAddress: req.ip,
+      userAgent: req.get("user-agent"),
+      deviceId: req.body.deviceId || null,
+      metadata: req.body.metadata || null
+    });
     const token = createAuthToken({
       employeeId: employee.publicId,
       mobileNumber: employee.mobileNumber,
       mobileVerified: true,
       totpVerified: true,
+      loginEventId,
       tokenType: "employee_access"
     });
 
@@ -348,6 +360,7 @@ async function verifyAdminAuthenticator(req, res, next) {
         tokenType: "Bearer",
         mobileNumber: employee.mobileNumber,
         employee,
+        loginEventId,
         menuAccess
       }
     });
@@ -391,8 +404,53 @@ async function getUserPermission(req, res, next) {
   }
 }
 
+async function logoutAdmin(req, res, next) {
+  try {
+    if (req.auth.tokenType !== "employee_access") {
+      return res.status(403).json({
+        status: "error",
+        message: "Employee access is required"
+      });
+    }
+
+    const updatedCount = await markEmployeeLoginEventLoggedOut(
+      req.auth.internalEmployeeId,
+      req.auth.loginEventId
+    );
+
+    return res.status(200).json({
+      status: "success",
+      message: "Logged out successfully",
+      data: {
+        updatedCount
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getAdminLoginEvents(req, res, next) {
+  try {
+    const data = await listEmployeeLoginEvents({
+      page: req.query.page,
+      limit: req.query.limit,
+      search: req.query.search
+    });
+
+    return res.status(200).json({
+      status: "success",
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
+  getAdminLoginEvents,
   getUserPermission,
+  logoutAdmin,
   sendAdminOtp,
   sendOtp,
   verifyAdminOtp,

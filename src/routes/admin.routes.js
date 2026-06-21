@@ -55,6 +55,9 @@ const {
   sendAdminAppNotification
 } = require("../controllers/notification.controller");
 const {
+  getAdminLoginEvents: getEmployeeLoginEvents
+} = require("../controllers/auth.controller");
+const {
   getAdminGeneralDetails,
   saveAdminGeneralDetails
 } = require("../controllers/general.controller");
@@ -129,6 +132,7 @@ router.post("/app-notifications", requireAuth, requireAdmin, sendAdminAppNotific
 router.get("/notifications", requireAuth, requireAdmin, getAdminNotifications);
 router.patch("/notifications/read-all", requireAuth, requireAdmin, readAllAdminNotifications);
 router.patch("/notifications/:publicId/read", requireAuth, requireAdmin, readAdminNotification);
+router.get("/login-events", requireAuth, requireAdmin, getEmployeeLoginEvents);
 router.get("/employees", requireAuth, requireAdmin, getAdminEmployees);
 router.post("/employees", requireAuth, requireAdmin, createAdminEmployee);
 router.get("/employee-menu-access", requireAuth, requireAdmin, getEmployeeMenuAccess);

@@ -324,14 +324,136 @@ async function deleteEmployeeByPublicId(publicId, updatedByUserId) {
   return result.affectedRows > 0;
 }
 
+async function createEmployeeLoginEvent(employee, login) {
+  const [result] = await pool.query(
+    `INSERT INTO employee_login_events (
+      employee_id,
+      employee_public_id,
+      mobile_number,
+      login_method,
+      login_status,
+      ip_address,
+      user_agent,
+      device_id,
+      metadata
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      employee.internalId,
+      employee.publicId,
+      employee.mobileNumber,
+      login.loginMethod || "otp_totp",
+      login.loginStatus || "success",
+      login.ipAddress || null,
+      login.userAgent || null,
+      login.deviceId || null,
+      login.metadata ? JSON.stringify(login.metadata) : null
+    ]
+  );
+
+  return result.insertId;
+}
+
+async function markEmployeeLoginEventLoggedOut(employeeId, loginEventId) {
+  const params = [employeeId];
+  const eventCondition = loginEventId ? "AND id = ?" : "";
+
+  if (loginEventId) {
+    params.push(loginEventId);
+  }
+
+  const [result] = await pool.query(
+    `UPDATE employee_login_events
+    SET logged_out_at = NOW(),
+      updated_at = NOW()
+    WHERE employee_id = ?
+      ${eventCondition}
+      AND logged_out_at IS NULL
+    ORDER BY logged_in_at DESC, id DESC
+    LIMIT 1`,
+    params
+  );
+
+  return result.affectedRows;
+}
+
+async function listEmployeeLoginEvents(options = {}) {
+  const page = Math.max(Number(options.page) || 1, 1);
+  const limit = Math.min(Math.max(Number(options.limit) || 20, 1), 100);
+  const offset = (page - 1) * limit;
+  const search = String(options.search || "").trim();
+  const conditions = [];
+  const params = [];
+
+  if (search) {
+    conditions.push(`(
+      e.full_name LIKE ?
+      OR e.mobile_number LIKE ?
+      OR e.email LIKE ?
+      OR e.employee_code LIKE ?
+    )`);
+    const term = `%${search}%`;
+    params.push(term, term, term, term);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const [[countRows], [rows]] = await Promise.all([
+    pool.query(
+      `SELECT COUNT(*) AS total
+      FROM employee_login_events ele
+      INNER JOIN employees e ON e.id = ele.employee_id
+      ${where}`,
+      params
+    ),
+    pool.query(
+      `SELECT
+        ele.id,
+        ele.employee_public_id AS employeePublicId,
+        e.full_name AS employeeName,
+        e.employee_code AS employeeCode,
+        ele.mobile_number AS mobileNumber,
+        e.email,
+        ele.login_method AS loginMethod,
+        ele.login_status AS loginStatus,
+        ele.ip_address AS ipAddress,
+        ele.user_agent AS userAgent,
+        ele.device_id AS deviceId,
+        ele.metadata,
+        ele.logged_in_at AS loggedInAt,
+        ele.logged_out_at AS loggedOutAt
+      FROM employee_login_events ele
+      INNER JOIN employees e ON e.id = ele.employee_id
+      ${where}
+      ORDER BY ele.logged_in_at DESC, ele.id DESC
+      LIMIT ?
+      OFFSET ?`,
+      [...params, limit, offset]
+    )
+  ]);
+  const total = Number(countRows[0]?.total || 0);
+
+  return {
+    loginEvents: rows,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit)
+    }
+  };
+}
+
 module.exports = {
   consumeEmployeeAuthenticatorStep,
   createEmployee,
+  createEmployeeLoginEvent,
   deleteEmployeeByPublicId,
   findActiveEmployeeByMobileNumber,
   findEmployeeByPublicId,
   getEmployeeAuthenticator,
+  listEmployeeLoginEvents,
   listEmployees,
+  markEmployeeLoginEventLoggedOut,
   setEmployeeAuthenticatorSecret,
   updateEmployeeByPublicId
 };
