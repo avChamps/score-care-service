@@ -10,9 +10,10 @@ const {
   createAdminDisputeRaisedNotification
 } = require("../models/admin-notification.model");
 const {
-  createCreditDisputeSubmittedNotification
+  createCreditDisputeSubmittedNotification,
+  createCreditDisputeStatusUpdatedNotification
 } = require("../models/notification.model");
-const { findUserById } = require("../models/user.model");
+const { findUserById, findUserByPublicId } = require("../models/user.model");
 const {
   sendStoredNotificationToUser
 } = require("../services/mobile-notification.service");
@@ -235,12 +236,19 @@ async function updateAdminDispute(req, res, next) {
       status,
       remarks
     });
+    const user = await findUserByPublicId(dispute.userPublicId);
+    const notification = await createCreditDisputeStatusUpdatedNotification(
+      user.internalId,
+      dispute
+    );
+    await sendStoredNotificationToUser(user.internalId, notification);
 
     return res.status(200).json({
       status: "success",
       message: "Dispute updated successfully",
       data: {
-        dispute
+        dispute,
+        notification
       }
     });
   } catch (error) {

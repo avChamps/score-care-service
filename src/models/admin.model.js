@@ -428,6 +428,9 @@ function mapAdminUser(row) {
 function buildAdminUsersWhere(options = {}) {
   const search = String(options.search || "").trim();
   const status = String(options.status || "").trim();
+  const subscribedOnly = ["true", "1"].includes(
+    String(options.subscribedOnly || "").toLowerCase()
+  );
   const from = String(options.from || "").trim();
   const totime = String(options.totime || "").trim();
   const conditions = [];
@@ -449,6 +452,15 @@ function buildAdminUsersWhere(options = {}) {
   if (status) {
     conditions.push("u.status = ?");
     params.push(status);
+  }
+
+  if (subscribedOnly) {
+    conditions.push(`EXISTS (
+      SELECT 1
+      FROM subscription_payments subscribedPayment
+      WHERE subscribedPayment.user_id = u.id
+        AND subscribedPayment.payment_status = 'paid'
+    )`);
   }
 
   if (from) {

@@ -49,6 +49,7 @@ async function getAdminUsers(req, res, next) {
       limit: req.query.limit,
       search: req.query.search,
       status: req.query.status,
+      subscribedOnly: req.query.subscribedOnly,
       from: req.query.from,
       totime: req.query.totime
     });

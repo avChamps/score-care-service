@@ -418,6 +418,24 @@ async function createCreditDisputeSubmittedNotification(userId, dispute) {
   });
 }
 
+async function createCreditDisputeStatusUpdatedNotification(userId, dispute) {
+  return createNotification(userId, {
+    type: "credit_dispute_status_updated",
+    title: "Credit dispute updated",
+    message: dispute.remarks
+      ? `Your credit dispute status is ${dispute.status}. Remarks: ${dispute.remarks}`
+      : `Your credit dispute status is ${dispute.status}.`,
+    notificationKey: `credit_dispute_status_updated:${dispute.publicId}:${Date.now()}`,
+    data: {
+      disputeId: dispute.publicId,
+      status: dispute.status,
+      remarks: dispute.remarks,
+      lenderName: dispute.lenderName,
+      errorType: dispute.errorType
+    }
+  });
+}
+
 async function createCibilRepairRequestUpdatedNotification(userId, request) {
   return createNotification(userId, {
     type: "cibil_repair_request_updated",
@@ -792,6 +810,7 @@ module.exports = {
   createCibilRepairRequestCreatedNotification,
   createCibilRepairRequestUpdatedNotification,
   createCreditDisputeSubmittedNotification,
+  createCreditDisputeStatusUpdatedNotification,
   createCreditRepairDocumentsUploadedNotification,
   createFeedbackSubmittedNotification,
   createFreeTierCreatedNotification,
