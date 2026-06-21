@@ -95,7 +95,25 @@ async function listCreditRepairDocumentsByUserId(userId) {
   return rows.map(mapCreditRepairDocument);
 }
 
+async function listCreditRepairDocumentsByUserIds(userIds) {
+  const ids = [...new Set(userIds.map(Number).filter(Boolean))];
+
+  if (!ids.length) {
+    return [];
+  }
+
+  const [rows] = await pool.query(
+    `${creditRepairDocumentSelect()}
+    WHERE user_id IN (?)
+    ORDER BY created_at DESC, id DESC`,
+    [ids]
+  );
+
+  return rows.map(mapCreditRepairDocument);
+}
+
 module.exports = {
   createCreditRepairDocument,
-  listCreditRepairDocumentsByUserId
+  listCreditRepairDocumentsByUserId,
+  listCreditRepairDocumentsByUserIds
 };

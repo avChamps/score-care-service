@@ -1,6 +1,9 @@
 const { randomUUID } = require("crypto");
 
 const { pool } = require("../config/db");
+const {
+  listCreditRepairDocumentsByUserIds
+} = require("./credit-repair-document.model");
 
 function parseJson(value) {
   if (!value || typeof value !== "string") {
@@ -19,7 +22,7 @@ function mapCibilRepairRequest(row) {
     return null;
   }
 
-  return {
+  const request = {
     id: row.publicId,
     publicId: row.publicId,
     userId: row.userPublicId,
@@ -51,8 +54,48 @@ function mapCibilRepairRequest(row) {
     progressItems: parseJson(row.progressItems) || [],
     remarks: row.remarks,
     accounts: parseJson(row.accounts) || [],
+    documents: row.documents || [],
     createdAt: row.createdAt,
     updatedAt: row.updatedAt
+  };
+
+  Object.defineProperty(request, "internalUserId", {
+    value: row.internalUserId,
+    enumerable: false
+  });
+
+  return request;
+}
+
+function attachDocumentsToAccounts(request, documents) {
+  const documentsByAccountNumber = documents.reduce((result, document) => {
+    const key = String(document.accountNumber || "").trim();
+
+    if (!key) {
+      return result;
+    }
+
+    const accountDocuments = result.get(key) || {};
+    const documentType = document.documentType || "document";
+    const existingDocuments = accountDocuments[documentType];
+
+    accountDocuments[documentType] = existingDocuments
+      ? [].concat(existingDocuments, document.documentUrl)
+      : document.documentUrl;
+    result.set(key, accountDocuments);
+
+    return result;
+  }, new Map());
+
+  return {
+    ...request,
+    accounts: request.accounts.map((account) => ({
+      ...account,
+      documents: documentsByAccountNumber.get(
+        String(account.accountNumber || "").trim()
+      ) || {}
+    })),
+    documents
   };
 }
 
@@ -167,7 +210,7 @@ async function listCibilRepairRequestsByUserId(userId) {
 
 async function listCibilRepairRequests(options = {}) {
   const page = Math.max(Number(options.page) || 1, 1);
-  const limit = Math.min(Math.max(Number(options.limit) || 20, 1), 100);
+  const limit = Math.min(Math.max(Number(options.limit) || 10, 1), 10);
   const offset = (page - 1) * limit;
   const search = String(options.search || "").trim();
   const repairStatus = String(options.repairStatus || options.status || "").trim();
@@ -221,6 +264,7 @@ async function listCibilRepairRequests(options = {}) {
     ),
     pool.query(
       `SELECT
+      crr.user_id AS internalUserId,
       crr.public_id AS publicId,
       crr.user_public_id AS userPublicId,
       u.full_name AS userName,
@@ -270,9 +314,26 @@ async function listCibilRepairRequests(options = {}) {
     )
   ]);
   const total = Number(countRows[0]?.total || 0);
+  const requests = rows.map(mapCibilRepairRequest);
+  const documents = await listCreditRepairDocumentsByUserIds(
+    requests.map((request) => request.internalUserId)
+  );
+  const documentsByUserId = documents.reduce((result, document) => {
+    const userDocuments = result.get(document.userId) || [];
+
+    userDocuments.push(document);
+    result.set(document.userId, userDocuments);
+
+    return result;
+  }, new Map());
 
   return {
-    requests: rows.map(mapCibilRepairRequest),
+    requests: requests.map((request) => (
+      attachDocumentsToAccounts(
+        request,
+        documentsByUserId.get(request.internalUserId) || []
+      )
+    )),
     pagination: {
       page,
       limit,

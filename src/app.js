@@ -22,6 +22,7 @@ const loanRoutes = require("./routes/loan.routes");
 const notificationRoutes = require("./routes/notification.routes");
 const subscriptionPlanRoutes = require("./routes/subscription-plan.routes");
 const userRoutes = require("./routes/user.routes");
+const websiteSettingRoutes = require("./routes/website-setting.routes");
 const {
   errorHandler,
   notFoundHandler
@@ -73,6 +74,7 @@ app.use("/api/notifications", notificationRoutes);
 app.use("/subscription-plans", subscriptionPlanRoutes);
 app.use("/users", userRoutes);
 app.use("/api/users", userRoutes);
+app.use("/website-settings", websiteSettingRoutes);
 
 app.use(notFoundHandler);
 app.use(errorHandler);
