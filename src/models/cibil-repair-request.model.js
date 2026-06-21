@@ -156,9 +156,62 @@ async function listCibilRepairRequestsByUserId(userId) {
   return rows.map(mapCibilRepairRequest);
 }
 
-async function listCibilRepairRequests() {
-  const [rows] = await pool.query(
-    `SELECT
+async function listCibilRepairRequests(options = {}) {
+  const page = Math.max(Number(options.page) || 1, 1);
+  const limit = Math.min(Math.max(Number(options.limit) || 20, 1), 100);
+  const offset = (page - 1) * limit;
+  const search = String(options.search || "").trim();
+  const repairStatus = String(options.repairStatus || options.status || "").trim();
+  const paymentStatus = String(options.paymentStatus || "").trim();
+  const from = String(options.from || "").trim();
+  const totime = String(options.totime || "").trim();
+  const conditions = [];
+  const params = [];
+
+  if (search) {
+    const term = `%${search}%`;
+    conditions.push(`(
+      crr.public_id LIKE ?
+      OR crr.user_public_id LIKE ?
+      OR u.full_name LIKE ?
+      OR u.email LIKE ?
+      OR u.mobile_number LIKE ?
+      OR crr.plan_name LIKE ?
+    )`);
+    params.push(term, term, term, term, term, term);
+  }
+
+  if (repairStatus) {
+    conditions.push("crr.repair_status = ?");
+    params.push(repairStatus);
+  }
+
+  if (paymentStatus) {
+    conditions.push("crr.payment_status = ?");
+    params.push(paymentStatus);
+  }
+
+  if (from) {
+    conditions.push("crr.created_at >= ?");
+    params.push(from);
+  }
+
+  if (totime) {
+    conditions.push("crr.created_at <= ?");
+    params.push(totime);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const [[countRows], [rows]] = await Promise.all([
+    pool.query(
+      `SELECT COUNT(*) AS total
+      FROM cibil_repair_requests crr
+      INNER JOIN users u ON u.id = crr.user_id
+      ${where}`,
+      params
+    ),
+    pool.query(
+      `SELECT
       crr.public_id AS publicId,
       crr.user_public_id AS userPublicId,
       u.full_name AS userName,
@@ -182,10 +235,23 @@ async function listCibilRepairRequests() {
       crr.updated_at AS updatedAt
     FROM cibil_repair_requests crr
     INNER JOIN users u ON u.id = crr.user_id
-    ORDER BY crr.created_at DESC, crr.id DESC`
-  );
+    ${where}
+    ORDER BY crr.created_at DESC, crr.id DESC
+    LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    )
+  ]);
+  const total = Number(countRows[0]?.total || 0);
 
-  return rows.map(mapCibilRepairRequest);
+  return {
+    requests: rows.map(mapCibilRepairRequest),
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit)
+    }
+  };
 }
 
 async function updateCibilRepairRequest(publicId, update) {

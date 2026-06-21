@@ -573,6 +573,123 @@ async function listAdminUsers(options = {}) {
   };
 }
 
+async function listAdminBasicSubscriptions(options = {}) {
+  const page = Math.max(Number(options.page) || 1, 1);
+  const limit = Math.min(Math.max(Number(options.limit) || 20, 1), 100);
+  const offset = (page - 1) * limit;
+  const search = String(options.search || "").trim();
+  const status = String(options.status || "").trim();
+  const from = String(options.from || "").trim();
+  const totime = String(options.totime || "").trim();
+  const conditions = [];
+  const params = [];
+
+  if (search) {
+    const term = `%${search}%`;
+    conditions.push(`(
+      u.public_id LIKE ?
+      OR u.full_name LIKE ?
+      OR u.mobile_number LIKE ?
+      OR u.pan_number LIKE ?
+      OR u.email LIKE ?
+    )`);
+    params.push(term, term, term, term, term);
+  }
+
+  if (status) {
+    conditions.push("u.subscription_status = ?");
+    params.push(status);
+  }
+
+  if (from) {
+    conditions.push("COALESCE(latestPayment.paid_at, latestPayment.created_at) >= ?");
+    params.push(from);
+  }
+
+  if (totime) {
+    conditions.push("COALESCE(latestPayment.paid_at, latestPayment.created_at) <= ?");
+    params.push(totime);
+  }
+
+  const where = conditions.length ? `WHERE ${conditions.join(" AND ")}` : "";
+  const joins = `FROM users u
+    INNER JOIN subscription_plans sp ON sp.id = u.subscription_plan_id
+    LEFT JOIN (
+      SELECT user_id, MAX(id) AS latestPaymentId
+      FROM subscription_payments
+      WHERE payment_status = 'paid'
+      GROUP BY user_id
+    ) paidPayment
+      ON paidPayment.user_id = u.id
+    LEFT JOIN subscription_payments latestPayment
+      ON latestPayment.id = paidPayment.latestPaymentId`;
+  const [[countRows], [rows]] = await Promise.all([
+    pool.query(
+      `SELECT COUNT(*) AS total
+      ${joins}
+      ${where}`,
+      params
+    ),
+    pool.query(
+      `SELECT
+        u.public_id AS userPublicId,
+        u.full_name AS userName,
+        u.email,
+        u.mobile_number AS mobileNumber,
+        u.pan_number AS panNumber,
+        u.subscription_status AS subscriptionStatus,
+        u.subscription_started_at AS subscriptionStartedAt,
+        u.subscription_due_at AS subscriptionDueAt,
+        u.subscription_ends_at AS subscriptionEndsAt,
+        sp.public_id AS planPublicId,
+        sp.plan_name AS planName,
+        latestPayment.amount,
+        latestPayment.currency,
+        latestPayment.payment_status AS paymentStatus,
+        latestPayment.razorpay_payment_id AS razorpayPaymentId,
+        latestPayment.paid_at AS paidAt,
+        latestPayment.created_at AS createdAt
+      ${joins}
+      ${where}
+      ORDER BY COALESCE(latestPayment.paid_at, latestPayment.created_at) DESC,
+        latestPayment.id DESC
+      LIMIT ? OFFSET ?`,
+      [...params, limit, offset]
+    )
+  ]);
+  const total = Number(countRows[0]?.total || 0);
+
+  return {
+    subscriptions: rows.map((row) => ({
+      userId: row.userPublicId,
+      userPublicId: row.userPublicId,
+      userName: row.userName,
+      email: row.email,
+      mobileNumber: row.mobileNumber,
+      panNumber: row.panNumber,
+      planId: row.planPublicId,
+      planPublicId: row.planPublicId,
+      planName: row.planName,
+      amount: Number(row.amount),
+      currency: row.currency,
+      paymentStatus: row.paymentStatus,
+      subscriptionStatus: row.subscriptionStatus,
+      razorpayPaymentId: row.razorpayPaymentId,
+      subscriptionStartedAt: row.subscriptionStartedAt,
+      subscriptionDueAt: row.subscriptionDueAt,
+      subscriptionEndsAt: row.subscriptionEndsAt,
+      paidAt: row.paidAt,
+      createdAt: row.createdAt
+    })),
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit)
+    }
+  };
+}
+
 async function exportAdminUsers(options = {}) {
   const { where, params } = buildAdminUsersWhere(options);
   const [rows] = await pool.query(
@@ -1080,6 +1197,7 @@ module.exports = {
   findAdminLoanById,
   getDashboardCounts,
   listAdminChats,
+  listAdminBasicSubscriptions,
   listAdminLoans,
   listAdminUsers,
   updateAdminLoanById,

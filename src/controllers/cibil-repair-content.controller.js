@@ -881,15 +881,21 @@ async function getMyCibilRepairStatus(req, res, next) {
   }
 }
 
-async function getAdminCibilRepairRequests(_req, res, next) {
+async function getAdminCibilRepairRequests(req, res, next) {
   try {
-    const requests = await listCibilRepairRequests();
+    const data = await listCibilRepairRequests({
+      page: req.query.page,
+      limit: req.query.limit,
+      search: req.query.search,
+      repairStatus: req.query.repairStatus || req.query.status,
+      paymentStatus: req.query.paymentStatus,
+      from: req.query.from,
+      totime: req.query.totime
+    });
 
     return res.status(200).json({
       status: "success",
-      data: {
-        requests
-      }
+      data
     });
   } catch (error) {
     next(error);

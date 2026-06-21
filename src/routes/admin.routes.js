@@ -3,6 +3,7 @@ const {
   downloadAdminLoanDetails,
   exportAdminLoansCsv,
   exportAdminUsersCsv,
+  getAdminBasicSubscriptions,
   getAdminChats,
   getAdminDashboardCounts,
   getAdminLoans,
@@ -118,6 +119,7 @@ router.get("/subscription-plans", requireAuth, requireAdmin, getAllSubscriptionP
 router.post("/subscription-plans", requireAuth, requireAdmin, createPlan);
 router.get("/basic-plan", requireAuth, requireAdmin, getAdminBasicPlan);
 router.post("/basic-plan", requireAuth, requireAdmin, saveAdminBasicPlan);
+router.get("/basic-subscriptions", requireAuth, requireAdmin, getAdminBasicSubscriptions);
 router.get("/feedback", requireAuth, requireAdmin, getAllFeedback);
 router.get("/contact-requests", requireAuth, requireAdmin, getAdminContactRequests);
 router.get("/disputes", requireAuth, requireAdmin, getAdminDisputes);

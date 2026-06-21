@@ -3,6 +3,7 @@ const {
   exportAdminUsers,
   findAdminLoanById,
   getDashboardCounts,
+  listAdminBasicSubscriptions,
   listAdminChats,
   listAdminLoans,
   listAdminUsers,
@@ -50,6 +51,26 @@ async function getAdminUsers(req, res, next) {
       search: req.query.search,
       status: req.query.status,
       subscribedOnly: req.query.subscribedOnly,
+      from: req.query.from,
+      totime: req.query.totime
+    });
+
+    return res.status(200).json({
+      status: "success",
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getAdminBasicSubscriptions(req, res, next) {
+  try {
+    const data = await listAdminBasicSubscriptions({
+      page: req.query.page,
+      limit: req.query.limit,
+      search: req.query.search,
+      status: req.query.status,
       from: req.query.from,
       totime: req.query.totime
     });
@@ -530,6 +551,7 @@ module.exports = {
   exportAdminLoansCsv,
   exportAdminUsersCsv,
   getAdminChats,
+  getAdminBasicSubscriptions,
   getAdminDashboardCounts,
   getAdminLoans,
   getAdminUsers,
