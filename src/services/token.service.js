@@ -2,8 +2,8 @@ const jwt = require("jsonwebtoken");
 
 const env = require("../config/env");
 
-function createAuthToken(payload) {
-  return jwt.sign(payload, env.jwt.secret);
+function createAuthToken(payload, options = {}) {
+  return jwt.sign(payload, env.jwt.secret, options);
 }
 
 function verifyAuthToken(token) {

@@ -21,6 +21,7 @@ function mapEmployee(row) {
     department: row.department,
     designation: row.designation,
     status: row.status,
+    authenticatorEnabled: Boolean(row.authenticatorEnabledAt),
     joinedAt: row.joinedAt,
     deletedAt: row.deletedAt,
     createdAt: row.createdAt,
@@ -57,6 +58,7 @@ function employeeSelect() {
     department,
     designation,
     status,
+    totp_enabled_at AS authenticatorEnabledAt,
     joined_at AS joinedAt,
     deleted_at AS deletedAt,
     created_at AS createdAt,
@@ -158,6 +160,53 @@ async function findActiveEmployeeByMobileNumber(mobileNumber) {
   );
 
   return mapEmployee(rows[0]);
+}
+
+async function getEmployeeAuthenticator(publicId) {
+  const [rows] = await pool.query(
+    `SELECT
+      totp_secret AS encryptedSecret,
+      totp_enabled_at AS enabledAt,
+      totp_last_used_step AS lastUsedStep
+    FROM employees
+    WHERE public_id = ?
+      AND status = 'active'
+      AND deleted_at IS NULL
+    LIMIT 1`,
+    [publicId]
+  );
+
+  return rows[0] || null;
+}
+
+async function setEmployeeAuthenticatorSecret(publicId, encryptedSecret) {
+  await pool.query(
+    `UPDATE employees
+    SET totp_secret = COALESCE(totp_secret, ?),
+      updated_at = NOW()
+    WHERE public_id = ?
+      AND status = 'active'
+      AND deleted_at IS NULL`,
+    [encryptedSecret, publicId]
+  );
+
+  return getEmployeeAuthenticator(publicId);
+}
+
+async function consumeEmployeeAuthenticatorStep(publicId, step) {
+  const [result] = await pool.query(
+    `UPDATE employees
+    SET totp_enabled_at = COALESCE(totp_enabled_at, NOW()),
+      totp_last_used_step = ?,
+      updated_at = NOW()
+    WHERE public_id = ?
+      AND status = 'active'
+      AND deleted_at IS NULL
+      AND (totp_last_used_step IS NULL OR totp_last_used_step < ?)`,
+    [step, publicId, step]
+  );
+
+  return result.affectedRows > 0;
 }
 
 async function resolveRoleId(rolePublicId) {
@@ -276,10 +325,13 @@ async function deleteEmployeeByPublicId(publicId, updatedByUserId) {
 }
 
 module.exports = {
+  consumeEmployeeAuthenticatorStep,
   createEmployee,
   deleteEmployeeByPublicId,
   findActiveEmployeeByMobileNumber,
   findEmployeeByPublicId,
+  getEmployeeAuthenticator,
   listEmployees,
+  setEmployeeAuthenticatorSecret,
   updateEmployeeByPublicId
 };

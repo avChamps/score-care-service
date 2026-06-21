@@ -3,6 +3,7 @@ const {
   getUserPermission,
   sendAdminOtp,
   sendOtp,
+  verifyAdminAuthenticator,
   verifyAdminOtp,
   verifyOtp
 } = require("../controllers/auth.controller");
@@ -13,6 +14,7 @@ const router = express.Router();
 router.post("/send-otp", sendOtp);
 router.post("/admin/send-otp", sendAdminOtp);
 router.post("/admin/verify-otp", verifyAdminOtp);
+router.post("/admin/verify-authenticator", verifyAdminAuthenticator);
 router.get("/user-permission", requireAuth, getUserPermission);
 router.post("/verify-otp", verifyOtp);
 

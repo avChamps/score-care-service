@@ -7,13 +7,24 @@ const {
   upsertUserForOtpLogin
 } = require("../models/user.model");
 const {
-  findActiveEmployeeByMobileNumber
+  consumeEmployeeAuthenticatorStep,
+  findActiveEmployeeByMobileNumber,
+  findEmployeeByPublicId,
+  getEmployeeAuthenticator,
+  setEmployeeAuthenticatorSecret
 } = require("../models/employee.model");
 const {
   findEmployeeRoleByPublicId,
   listMenuAccessByEmployeePublicId
 } = require("../models/employee-role.model");
-const { createAuthToken } = require("../services/token.service");
+const { createAuthToken, verifyAuthToken } = require("../services/token.service");
+const {
+  createTotpAuthUrl,
+  decryptTotpSecret,
+  encryptTotpSecret,
+  findMatchingTotpStep,
+  generateTotpSecret
+} = require("../services/totp.service");
 const {
   sendFirstTimeWelcomeWhatsapp,
   sendWhatsAppSafely
@@ -193,24 +204,151 @@ async function verifyAdminOtp(req, res, next) {
     }
 
     const otpResponse = await verifyMobileOtp(mobileNumber, otp);
-    const menuAccess = await listMenuAccessByEmployeePublicId(employee.publicId);
-    const token = createAuthToken({
+    let authenticator = await getEmployeeAuthenticator(employee.publicId);
+
+    if (!authenticator?.encryptedSecret) {
+      authenticator = await setEmployeeAuthenticatorSecret(
+        employee.publicId,
+        encryptTotpSecret(generateTotpSecret())
+      );
+    }
+
+    const secret = decryptTotpSecret(authenticator.encryptedSecret);
+    const mfaToken = createAuthToken({
       employeeId: employee.publicId,
       mobileNumber,
       mobileVerified: true,
+      tokenType: "employee_mfa"
+    }, { expiresIn: "5m" });
+    const authenticatorSetupRequired = !authenticator.enabledAt;
+
+    return res.status(200).json({
+      status: "success",
+      message: "OTP verified. Google Authenticator verification is required.",
+      data: {
+        mfaToken,
+        mfaTokenType: "Bearer",
+        mobileNumber,
+        employee,
+        requiresAuthenticator: true,
+        authenticatorSetupRequired,
+        authenticatorSetup: authenticatorSetupRequired
+          ? {
+              secret,
+              otpauthUrl: createTotpAuthUrl(
+                secret,
+                employee.email || employee.mobileNumber
+              )
+            }
+          : null,
+        otpProvider: otpResponse
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function verifyAdminAuthenticator(req, res, next) {
+  try {
+    const authorization = req.get("authorization") || "";
+    const [scheme, bearerToken] = authorization.split(" ");
+    const mfaToken = String(
+      req.body.mfaToken || (scheme === "Bearer" ? bearerToken : "") || ""
+    ).trim();
+    const code = String(req.body.code || req.body.authenticatorCode || "").trim();
+
+    if (!mfaToken) {
+      return res.status(401).json({
+        status: "error",
+        message: "MFA token is required"
+      });
+    }
+
+    if (!/^\d{6}$/.test(code)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Valid 6 digit authenticator code is required"
+      });
+    }
+
+    let mfaAuth;
+
+    try {
+      mfaAuth = verifyAuthToken(mfaToken);
+    } catch (_error) {
+      return res.status(401).json({
+        status: "error",
+        message: "Invalid or expired MFA token"
+      });
+    }
+
+    if (mfaAuth.tokenType !== "employee_mfa" || !mfaAuth.employeeId) {
+      return res.status(401).json({
+        status: "error",
+        message: "Invalid or expired MFA token"
+      });
+    }
+
+    let employee = await findEmployeeByPublicId(mfaAuth.employeeId);
+
+    if (!employee || employee.status !== "active" || employee.deletedAt) {
+      return res.status(403).json({
+        status: "error",
+        message: "You do not have employee access."
+      });
+    }
+
+    const authenticator = await getEmployeeAuthenticator(employee.publicId);
+
+    if (!authenticator?.encryptedSecret) {
+      return res.status(400).json({
+        status: "error",
+        message: "Google Authenticator setup is required"
+      });
+    }
+
+    const secret = decryptTotpSecret(authenticator.encryptedSecret);
+    const matchedStep = findMatchingTotpStep(secret, code);
+
+    if (matchedStep === null) {
+      return res.status(400).json({
+        status: "error",
+        message: "Invalid authenticator code"
+      });
+    }
+
+    const consumed = await consumeEmployeeAuthenticatorStep(
+      employee.publicId,
+      matchedStep
+    );
+
+    if (!consumed) {
+      return res.status(400).json({
+        status: "error",
+        message: "Authenticator code has already been used"
+      });
+    }
+
+    employee = await findEmployeeByPublicId(employee.publicId);
+    const menuAccess = await listMenuAccessByEmployeePublicId(employee.publicId);
+    const token = createAuthToken({
+      employeeId: employee.publicId,
+      mobileNumber: employee.mobileNumber,
+      mobileVerified: true,
+      totpVerified: true,
       tokenType: "employee_access"
     });
 
     return res.status(200).json({
       status: "success",
-      message: "OTP verified successfully",
+      message: "Google Authenticator verified successfully",
       data: {
         token,
         tokenType: "Bearer",
-        mobileNumber,
+        mobileNumber: employee.mobileNumber,
         employee,
-        menuAccess,
-        otpProvider: otpResponse
+        menuAccess
       }
     });
   } catch (error) {
@@ -258,5 +396,6 @@ module.exports = {
   sendAdminOtp,
   sendOtp,
   verifyAdminOtp,
+  verifyAdminAuthenticator,
   verifyOtp
 };
