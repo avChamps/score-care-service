@@ -7,8 +7,12 @@ const {
   updateDisputeByPublicId
 } = require("../models/dispute.model");
 const {
+  createAdminDisputeRaisedNotification
+} = require("../models/admin-notification.model");
+const {
   createCreditDisputeSubmittedNotification
 } = require("../models/notification.model");
+const { findUserById } = require("../models/user.model");
 const {
   sendStoredNotificationToUser
 } = require("../services/mobile-notification.service");
@@ -133,6 +137,8 @@ async function submitDispute(req, res, next) {
       req.auth.internalUserId,
       dispute
     );
+    const user = await findUserById(req.auth.internalUserId);
+    await createAdminDisputeRaisedNotification(user, dispute);
     await sendStoredNotificationToUser(req.auth.internalUserId, notification);
 
     return res.status(201).json({

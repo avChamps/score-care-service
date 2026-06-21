@@ -17,6 +17,9 @@ const {
   updateCibilRepairRequest
 } = require("../models/cibil-repair-request.model");
 const {
+  createAdminCreditRepairNotification
+} = require("../models/admin-notification.model");
+const {
   countUnreadNotificationsByUserPublicId,
   createCibilRepairRequestCreatedNotification,
   createCibilRepairRequestUpdatedNotification,
@@ -738,6 +741,8 @@ async function createMyCibilRepairRequest(req, res, next) {
       req.auth.internalUserId,
       request
     );
+    const user = await findUserById(req.auth.internalUserId);
+    await createAdminCreditRepairNotification(user, request);
     await sendStoredNotificationToUser(req.auth.internalUserId, notification);
     const [notifications, unreadCount] = await Promise.all([
       listNotificationsByUserPublicId(req.auth.userId),

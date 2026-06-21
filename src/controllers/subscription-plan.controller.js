@@ -12,6 +12,9 @@ const {
 const { findUserById } = require("../models/user.model");
 const { findCibilReportByUserId } = require("../models/credit-report.model");
 const {
+  createAdminSubscriptionNotification
+} = require("../models/admin-notification.model");
+const {
   sendMonthlyScoreChangedEmail
 } = require("../services/profile-email.service");
 const {
@@ -415,12 +418,14 @@ async function confirmGatewaySubscriptionPayment(req, res, next) {
       });
     }
 
-    await updateGatewaySubscriptionPayment({
+    const amount = Number(req.body.amount || 0);
+    const currency = normalizeString(req.body.currency || "INR").toUpperCase();
+    const plan = await updateGatewaySubscriptionPayment({
       userId: req.auth.internalUserId,
       razorpaySubscriptionId: null,
       razorpayPaymentId,
-      amount: Number(req.body.amount || 0),
-      currency: normalizeString(req.body.currency || "INR").toUpperCase(),
+      amount,
+      currency,
       paymentStatus: "paid",
       paidAt: new Date(),
       currentEnd: null,
@@ -435,6 +440,12 @@ async function confirmGatewaySubscriptionPayment(req, res, next) {
     ]);
     const emailAlert = await sendMonthlyScoreChangedEmail(user, {
       creditScore: report?.creditScore
+    });
+    await createAdminSubscriptionNotification(user, {
+      paymentId: razorpayPaymentId,
+      planPublicId: plan?.publicId,
+      amount,
+      currency
     });
 
     return res.status(200).json({

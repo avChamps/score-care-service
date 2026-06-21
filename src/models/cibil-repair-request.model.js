@@ -24,6 +24,9 @@ function mapCibilRepairRequest(row) {
     publicId: row.publicId,
     userId: row.userPublicId,
     userPublicId: row.userPublicId,
+    userName: row.userName,
+    email: row.email,
+    mobileNumber: row.mobileNumber,
     planId: row.planPublicId,
     planPublicId: row.planPublicId,
     planName: row.planName,
@@ -155,8 +158,31 @@ async function listCibilRepairRequestsByUserId(userId) {
 
 async function listCibilRepairRequests() {
   const [rows] = await pool.query(
-    `${requestSelect()}
-    ORDER BY created_at DESC, id DESC`
+    `SELECT
+      crr.public_id AS publicId,
+      crr.user_public_id AS userPublicId,
+      u.full_name AS userName,
+      u.email,
+      u.mobile_number AS mobileNumber,
+      crr.plan_public_id AS planPublicId,
+      crr.plan_name AS planName,
+      crr.amount,
+      crr.currency,
+      crr.payment_status AS paymentStatus,
+      crr.razorpay_order_id AS razorpayOrderId,
+      crr.razorpay_payment_id AS razorpayPaymentId,
+      crr.repair_status AS repairStatus,
+      crr.active_disputes AS activeDisputes,
+      crr.resolved_disputes AS resolvedDisputes,
+      crr.points_gained AS pointsGained,
+      crr.progress_items AS progressItems,
+      crr.remarks,
+      crr.accounts,
+      crr.created_at AS createdAt,
+      crr.updated_at AS updatedAt
+    FROM cibil_repair_requests crr
+    INNER JOIN users u ON u.id = crr.user_id
+    ORDER BY crr.created_at DESC, crr.id DESC`
   );
 
   return rows.map(mapCibilRepairRequest);

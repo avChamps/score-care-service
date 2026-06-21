@@ -28,6 +28,9 @@ function mapDispute(row) {
     publicId: row.publicId,
     userId: row.userPublicId,
     userPublicId: row.userPublicId,
+    userName: row.userName,
+    email: row.email,
+    mobileNumber: row.mobileNumber,
     accountData: parseJson(row.accountData, null),
     lenderName: row.lenderName,
     accountNumber: row.accountNumber,
@@ -156,8 +159,30 @@ async function findDisputeByPublicId(publicId) {
 
 async function listDisputes() {
   const [rows] = await pool.query(
-    `${disputeSelect()}
-    ORDER BY submitted_at DESC, id DESC`
+    `SELECT
+      cd.public_id AS publicId,
+      cd.user_public_id AS userPublicId,
+      u.full_name AS userName,
+      u.email,
+      u.mobile_number AS mobileNumber,
+      cd.account_data AS accountData,
+      cd.lender_name AS lenderName,
+      cd.account_number AS accountNumber,
+      cd.error_type AS errorType,
+      cd.bureaus,
+      cd.additional_details AS additionalDetails,
+      cd.remarks,
+      cd.documents,
+      cd.status,
+      cd.progress_step AS progressStep,
+      cd.points_gained AS pointsGained,
+      cd.submitted_at AS submittedAt,
+      cd.resolved_at AS resolvedAt,
+      cd.created_at AS createdAt,
+      cd.updated_at AS updatedAt
+    FROM credit_disputes cd
+    LEFT JOIN users u ON u.public_id = cd.user_public_id
+    ORDER BY cd.submitted_at DESC, cd.id DESC`
   );
 
   return rows.map(mapDispute);

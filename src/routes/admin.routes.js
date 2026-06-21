@@ -47,7 +47,10 @@ const {
   updateAdminDispute
 } = require("../controllers/dispute.controller");
 const {
+  getAdminNotifications,
   getAdminSentAppNotifications,
+  readAdminNotification,
+  readAllAdminNotifications,
   sendAdminAppNotification
 } = require("../controllers/notification.controller");
 const {
@@ -121,6 +124,9 @@ router.get("/disputes", requireAuth, requireAdmin, getAdminDisputes);
 router.patch("/disputes/:publicId", requireAuth, requireAdmin, updateAdminDispute);
 router.get("/app-notifications", requireAuth, requireAdmin, getAdminSentAppNotifications);
 router.post("/app-notifications", requireAuth, requireAdmin, sendAdminAppNotification);
+router.get("/notifications", requireAuth, requireAdmin, getAdminNotifications);
+router.patch("/notifications/read-all", requireAuth, requireAdmin, readAllAdminNotifications);
+router.patch("/notifications/:publicId/read", requireAuth, requireAdmin, readAdminNotification);
 router.get("/employees", requireAuth, requireAdmin, getAdminEmployees);
 router.post("/employees", requireAuth, requireAdmin, createAdminEmployee);
 router.get("/employee-menu-access", requireAuth, requireAdmin, getEmployeeMenuAccess);

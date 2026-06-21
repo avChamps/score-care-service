@@ -11,6 +11,11 @@ const {
   upsertUserFcmToken
 } = require("../models/notification.model");
 const {
+  listAdminNotifications,
+  markAdminNotificationRead,
+  markAllAdminNotificationsRead
+} = require("../models/admin-notification.model");
+const {
   sendToMultipleUsers,
   sendToUser
 } = require("../services/notification.service");
@@ -265,9 +270,70 @@ async function getAdminSentAppNotifications(req, res, next) {
   }
 }
 
+async function getAdminNotifications(req, res, next) {
+  try {
+    const data = await listAdminNotifications({
+      page: req.query.page,
+      limit: req.query.limit,
+      type: req.query.type,
+      search: req.query.search,
+      unreadOnly: req.query.unreadOnly
+    });
+
+    return res.status(200).json({
+      status: "success",
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function readAdminNotification(req, res, next) {
+  try {
+    const notification = await markAdminNotificationRead(req.params.publicId);
+
+    if (!notification) {
+      return res.status(404).json({
+        status: "error",
+        message: "Admin notification not found"
+      });
+    }
+
+    return res.status(200).json({
+      status: "success",
+      message: "Admin notification marked as read",
+      data: {
+        notification
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function readAllAdminNotifications(_req, res, next) {
+  try {
+    const updatedCount = await markAllAdminNotificationsRead();
+
+    return res.status(200).json({
+      status: "success",
+      message: "Admin notifications marked as read",
+      data: {
+        updatedCount
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
+  getAdminNotifications,
   getAdminSentAppNotifications,
   getMyNotifications,
+  readAdminNotification,
+  readAllAdminNotifications,
   readAllNotifications,
   readNotification,
   registerDevice,
