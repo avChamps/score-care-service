@@ -29,6 +29,8 @@ const imageAllowedMimeTypes = new Set([
   "image/webp"
 ]);
 const imageAllowedExtensions = new Set([".gif", ".jpg", ".jpeg", ".png", ".webp"]);
+const pdfAllowedMimeTypes = new Set(["application/pdf"]);
+const pdfAllowedExtensions = new Set([".pdf"]);
 
 const uploadFields = [
   { name: "salarySlips", maxCount: 8 },
@@ -106,6 +108,10 @@ function getCreditRepairDocumentRelativePath(publicId, fileName) {
 }
 
 function getHomepageImageThemeRelativePath(fileName) {
+  return path.posix.join("Project-General", fileName);
+}
+
+function getWebsiteSettingsDocumentRelativePath(fileName) {
   return path.posix.join("Project-General", fileName);
 }
 
@@ -378,6 +384,38 @@ async function saveHomepageImageThemeFile(file) {
   return saveHomepageImageThemeFileLocally(file);
 }
 
+async function saveWebsiteSettingsDocumentLocally(file) {
+  const fileName = buildFileName(file);
+  const relativePath = getWebsiteSettingsDocumentRelativePath(fileName);
+  const fullPath = getLocalPath(relativePath);
+
+  await fs.mkdir(path.dirname(fullPath), { recursive: true });
+  await fs.writeFile(fullPath, file.buffer);
+
+  return mapSavedFile(file, fileName, relativePath);
+}
+
+async function saveWebsiteSettingsDocumentToSftp(file) {
+  return withSftp(async (sftp) => {
+    const fileName = buildFileName(file);
+    const relativePath = getWebsiteSettingsDocumentRelativePath(fileName);
+    const remotePath = getSftpRemotePath(relativePath);
+
+    await sftp.mkdir(path.posix.dirname(remotePath), true);
+    await sftp.put(file.buffer, remotePath);
+
+    return mapSavedFile(file, fileName, relativePath);
+  });
+}
+
+async function saveWebsiteSettingsDocument(file) {
+  if (env.assets.storageDriver === "sftp") {
+    return saveWebsiteSettingsDocumentToSftp(file);
+  }
+
+  return saveWebsiteSettingsDocumentLocally(file);
+}
+
 async function deleteSavedFiles(documents = {}) {
   const files = flattenSavedDocuments(documents);
 
@@ -538,6 +576,26 @@ const homepageImageThemeMulter = multer({
   }
 });
 
+const websiteSettingsDocumentMulter = multer({
+  storage: multer.memoryStorage(),
+  fileFilter(_req, file, callback) {
+    const ext = path.extname(file.originalname || "").toLowerCase();
+
+    if (!pdfAllowedMimeTypes.has(file.mimetype) || !pdfAllowedExtensions.has(ext)) {
+      const error = new Error("Only PDF uploads are allowed");
+      error.statusCode = 400;
+      callback(error);
+      return;
+    }
+
+    callback(null, true);
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+    files: 4
+  }
+});
+
 function creditRepairDocumentUpload(req, res, next) {
   creditRepairDocumentMulter.single("file")(req, res, (error) => {
     if (error) {
@@ -562,6 +620,28 @@ function homepageImageThemeUpload(req, res, next) {
         return res.status(400).json({
           status: "error",
           message: "image must be 5MB or smaller"
+        });
+      }
+
+      return handleMulterError(error, req, res, next);
+    }
+
+    return next();
+  });
+}
+
+function websiteSettingsDocumentUpload(req, res, next) {
+  websiteSettingsDocumentMulter.fields([
+    { name: "privacyPolicy", maxCount: 1 },
+    { name: "termsOfService", maxCount: 1 },
+    { name: "disclaimer", maxCount: 1 },
+    { name: "accountDeletion", maxCount: 1 }
+  ])(req, res, (error) => {
+    if (error) {
+      if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+        return res.status(400).json({
+          status: "error",
+          message: "Each document must be 5MB or smaller"
         });
       }
 
@@ -600,6 +680,8 @@ module.exports = {
   saveCreditRepairDocumentFile,
   saveDisputeUploadedFiles,
   saveHomepageImageThemeFile,
+  saveWebsiteSettingsDocument,
   saveUploadedFiles,
-  uploadFields
+  uploadFields,
+  websiteSettingsDocumentUpload
 };

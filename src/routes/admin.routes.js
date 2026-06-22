@@ -66,6 +66,10 @@ const {
   saveAdminLegalContentDetails
 } = require("../controllers/legal-content.controller");
 const {
+  getAdminWebsiteSettingsDetails,
+  saveAdminWebsiteSettingsDetails
+} = require("../controllers/website-setting.controller");
+const {
   createAdminCibilRepairTimeline,
   deleteAdminCibilRepairTimeline,
   getAdminCibilRepairContent,
@@ -89,6 +93,7 @@ const {
   requireAdmin,
   requireAuth
 } = require("../middleware/auth.middleware");
+const { websiteSettingsDocumentUpload } = require("../utils/upload-assets");
 
 const router = express.Router();
 
@@ -149,6 +154,21 @@ router.post("/faqs", requireAuth, requireAdmin, saveFaqs);
 router.get("/general", requireAuth, requireAdmin, getAdminGeneralDetails);
 router.post("/general", requireAuth, requireAdmin, saveAdminGeneralDetails);
 router.patch("/general", requireAuth, requireAdmin, saveAdminGeneralDetails);
+router.get("/website-settings", requireAuth, requireAdmin, getAdminWebsiteSettingsDetails);
+router.post(
+  "/website-settings",
+  requireAuth,
+  requireAdmin,
+  websiteSettingsDocumentUpload,
+  saveAdminWebsiteSettingsDetails
+);
+router.patch(
+  "/website-settings",
+  requireAuth,
+  requireAdmin,
+  websiteSettingsDocumentUpload,
+  saveAdminWebsiteSettingsDetails
+);
 router.get("/legal-content", requireAuth, requireAdmin, getAdminLegalContentDetails);
 router.post("/legal-content", requireAuth, requireAdmin, saveAdminLegalContentDetails);
 router.patch("/legal-content", requireAuth, requireAdmin, saveAdminLegalContentDetails);

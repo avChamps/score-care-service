@@ -21,6 +21,34 @@ async function getWebsiteSettings() {
   };
 }
 
+async function updateWebsiteSettings(values) {
+  await pool.query(
+    `INSERT INTO website_settings (
+      id,
+      privacy_policy,
+      terms_of_service,
+      disclaimer,
+      account_deletion
+    )
+    VALUES (1, ?, ?, ?, ?)
+    ON DUPLICATE KEY UPDATE
+      privacy_policy = VALUES(privacy_policy),
+      terms_of_service = VALUES(terms_of_service),
+      disclaimer = VALUES(disclaimer),
+      account_deletion = VALUES(account_deletion),
+      updated_at = NOW()`,
+    [
+      values.privacyPolicy,
+      values.termsOfService,
+      values.disclaimer,
+      values.accountDeletion
+    ]
+  );
+
+  return getWebsiteSettings();
+}
+
 module.exports = {
-  getWebsiteSettings
+  getWebsiteSettings,
+  updateWebsiteSettings
 };

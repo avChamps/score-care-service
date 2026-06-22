@@ -10,6 +10,7 @@ const allowedPermissions = new Set(["view", "create", "read", "update", "delete"
 const defaultMenuAccess = [
   { menuName: "Dashboard", childMenuName: null, permissions: ["read"] },
   { menuName: "General", childMenuName: "Site Settings", permissions: ["read", "update"] },
+  { menuName: "General", childMenuName: "Website Settings", permissions: ["read", "update"] },
   { menuName: "General", childMenuName: "Homepage Themes", permissions: ["create", "read", "update", "delete"] },
   { menuName: "General", childMenuName: "Legal Center", permissions: ["read", "update"] },
   { menuName: "General", childMenuName: "Notifications", permissions: ["create", "read"] },
