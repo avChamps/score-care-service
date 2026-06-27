@@ -50,30 +50,38 @@ function normalizeData(data = {}, screen) {
 }
 
 function buildMessage(token, payload = {}) {
+  const title = payload.title || "";
+  const body = payload.body || "";
   const message = {
     token,
     notification: {
-      title: payload.title || "",
-      body: payload.body || ""
+      title,
+      body
     },
     data: normalizeData({
-      title: payload.title || "",
-      body: payload.body || "",
+      title,
+      body,
       ...payload.data
     }, payload.screen),
     android: {
       priority: "high",
       notification: {
+        channelId: "scorecare_notifications",
         priority: "high",
         sound: "default"
       }
     },
     apns: {
       headers: {
+        "apns-push-type": "alert",
         "apns-priority": "10"
       },
       payload: {
         aps: {
+          alert: {
+            title,
+            body
+          },
           sound: "default"
         }
       }
