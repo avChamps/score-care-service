@@ -20,6 +20,7 @@ function mapEmployee(row) {
     roleName: row.roleName,
     department: row.department,
     designation: row.designation,
+    reportsTo: row.reportsTo,
     status: row.status,
     authenticatorEnabled: Boolean(row.authenticatorEnabledAt),
     joinedAt: row.joinedAt,
@@ -57,6 +58,7 @@ function employeeSelect() {
     ) AS roleName,
     department,
     designation,
+    reports_to AS reportsTo,
     status,
     totp_enabled_at AS authenticatorEnabledAt,
     joined_at AS joinedAt,
@@ -147,6 +149,106 @@ async function findEmployeeByPublicId(publicId) {
   );
 
   return mapEmployee(rows[0]);
+}
+
+function parseJson(value) {
+  if (!value || typeof value !== "string") {
+    return value || [];
+  }
+
+  try {
+    return JSON.parse(value);
+  } catch (_error) {
+    return [];
+  }
+}
+
+function getBrowser(userAgent) {
+  const value = String(userAgent || "");
+
+  if (value.includes("Edg/")) {
+    return "Edge";
+  }
+
+  if (value.includes("Chrome/") || value.includes("CriOS/")) {
+    return "Chrome";
+  }
+
+  if (value.includes("Safari/")) {
+    return "Safari";
+  }
+
+  if (value.includes("Firefox/")) {
+    return "Firefox";
+  }
+
+  return null;
+}
+
+function mapLoginActivity(row) {
+  const metadata = parseJson(row.metadata);
+
+  return {
+    id: Number(row.id),
+    loginStatus: row.loginStatus,
+    browser: metadata.browser || getBrowser(row.userAgent),
+    location: metadata.location || metadata.city || null,
+    ipAddress: row.ipAddress,
+    userAgent: row.userAgent,
+    loggedInAt: row.loggedInAt
+  };
+}
+
+function mapPermission(row) {
+  return {
+    menuName: row.menuName,
+    childMenuName: row.childMenuName,
+    permissions: parseJson(row.permissions)
+  };
+}
+
+async function findEmployeeDetailByPublicId(publicId) {
+  const employee = await findEmployeeByPublicId(publicId);
+
+  if (!employee) {
+    return null;
+  }
+
+  const [[loginRows], [permissionRows]] = await Promise.all([
+    pool.query(
+      `SELECT
+        id,
+        login_status AS loginStatus,
+        ip_address AS ipAddress,
+        user_agent AS userAgent,
+        metadata,
+        logged_in_at AS loggedInAt
+      FROM employee_login_events
+      WHERE employee_public_id = ?
+      ORDER BY logged_in_at DESC, id DESC
+      LIMIT 3`,
+      [publicId]
+    ),
+    pool.query(
+      `SELECT
+        erp.menu_name AS menuName,
+        erp.child_menu_name AS childMenuName,
+        erp.permissions
+      FROM employees e
+      INNER JOIN employee_roles er ON er.id = e.role_id
+      INNER JOIN employee_role_permissions erp ON erp.role_id = er.id
+      WHERE e.public_id = ?
+        AND er.deleted_at IS NULL
+      ORDER BY erp.id ASC`,
+      [publicId]
+    )
+  ]);
+
+  return {
+    employee,
+    recentLoginActivity: loginRows.map(mapLoginActivity),
+    permissions: permissionRows.map(mapPermission)
+  };
 }
 
 async function findEmployeeByPublicIdOrCode(value) {
@@ -253,12 +355,13 @@ async function createEmployee(values) {
       role_id,
       department,
       designation,
+      reports_to,
       status,
       joined_at,
       created_by_user_id,
       updated_by_user_id
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       publicId,
       null,
@@ -269,6 +372,7 @@ async function createEmployee(values) {
       roleId,
       values.department,
       values.designation,
+      values.reportsTo,
       values.status,
       values.joinedAt,
       values.updatedByUserId,
@@ -299,6 +403,7 @@ async function updateEmployeeByPublicId(publicId, values) {
     role_id: roleId,
     department: values.department,
     designation: values.designation,
+    reports_to: values.reportsTo,
     status: values.status,
     joined_at: values.joinedAt,
     updated_by_user_id: values.updatedByUserId
@@ -474,6 +579,7 @@ module.exports = {
   deleteEmployeeByPublicId,
   findActiveEmployeeByMobileNumber,
   findEmployeeByPublicId,
+  findEmployeeDetailByPublicId,
   findEmployeeByPublicIdOrCode,
   getEmployeeAuthenticator,
   listEmployeeLoginEvents,

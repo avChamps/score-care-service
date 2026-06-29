@@ -1,7 +1,7 @@
 const {
   createEmployee,
   deleteEmployeeByPublicId,
-  findEmployeeByPublicId,
+  findEmployeeDetailByPublicId,
   listEmployees,
   updateEmployeeByPublicId
 } = require("../models/employee.model");
@@ -75,6 +75,10 @@ function normalizeEmployeePayload(body, errors, partial = false) {
     value.designation = normalizeNullableString(body.designation);
   }
 
+  if (!partial || Object.prototype.hasOwnProperty.call(body, "reportsTo")) {
+    value.reportsTo = normalizeNullableString(body.reportsTo);
+  }
+
   if (!partial || Object.prototype.hasOwnProperty.call(body, "status")) {
     value.status = normalizeString(body.status || "active");
 
@@ -129,9 +133,9 @@ async function getAdminEmployees(req, res, next) {
 
 async function getAdminEmployee(req, res, next) {
   try {
-    const employee = await findEmployeeByPublicId(req.params.publicId);
+    const data = await findEmployeeDetailByPublicId(req.params.publicId);
 
-    if (!employee) {
+    if (!data) {
       return res.status(404).json({
         status: "error",
         message: "Employee not found"
@@ -140,9 +144,7 @@ async function getAdminEmployee(req, res, next) {
 
     return res.status(200).json({
       status: "success",
-      data: {
-        employee
-      }
+      data
     });
   } catch (error) {
     next(error);
