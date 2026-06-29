@@ -96,6 +96,12 @@ const {
   getAdminManualCreditReportDownloads
 } = require("../controllers/credit-report.controller");
 const {
+  createAdminAnnouncement,
+  deleteAdminAnnouncement,
+  getAdminAnnouncements,
+  updateAdminAnnouncement
+} = require("../controllers/announcement.controller");
+const {
   requireAdmin,
   requireAuth
 } = require("../middleware/auth.middleware");
@@ -160,6 +166,10 @@ router.patch("/employees/:publicId", requireAuth, requireAdmin, updateAdminEmplo
 router.delete("/employees/:publicId", requireAuth, requireAdmin, deleteAdminEmployee);
 router.get("/faqs", requireAuth, requireAdmin, getAllFaqs);
 router.post("/faqs", requireAuth, requireAdmin, saveFaqs);
+router.get("/announcements", requireAuth, requireAdmin, getAdminAnnouncements);
+router.post("/announcements", requireAuth, requireAdmin, createAdminAnnouncement);
+router.patch("/announcements/:publicId", requireAuth, requireAdmin, updateAdminAnnouncement);
+router.delete("/announcements/:publicId", requireAuth, requireAdmin, deleteAdminAnnouncement);
 router.get("/general", requireAuth, requireAdmin, getAdminGeneralDetails);
 router.post("/general", requireAuth, requireAdmin, saveAdminGeneralDetails);
 router.patch("/general", requireAuth, requireAdmin, saveAdminGeneralDetails);
