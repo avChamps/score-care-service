@@ -42,7 +42,7 @@ const {
 
 const mobilePattern = /^[6-9]\d{9}$/;
 const otpPattern = /^\d{4,9}$/;
-const adminBypassOtp = "123456";
+const userBypassOtp = "123456";
 
 function isProfileComplete(user) {
   return Boolean(user?.panNumber && user?.fullName);
@@ -62,7 +62,7 @@ async function sendOtp(req, res, next) {
     const otpResponse = {
       type: "success",
       message: "Bypass OTP generated successfully",
-      otp: adminBypassOtp
+      otp: userBypassOtp
     };
 
     return res.status(200).json({
@@ -217,12 +217,7 @@ async function verifyAdminOtp(req, res, next) {
       });
     }
 
-    const otpResponse = otp === adminBypassOtp
-      ? {
-          type: "success",
-          message: "Bypass OTP verified successfully"
-        }
-      : await verifyMobileOtp(mobileNumber, otp);
+    const otpResponse = await verifyMobileOtp(mobileNumber, otp);
     let authenticator = await getEmployeeAuthenticator(employee.publicId);
 
     if (!authenticator?.encryptedSecret) {
@@ -327,13 +322,8 @@ async function verifyAdminAuthenticator(req, res, next) {
       });
     }
 
-    const isBypassAuthenticatorCode = code === adminBypassOtp;
-    const secret = isBypassAuthenticatorCode
-      ? null
-      : decryptTotpSecret(authenticator.encryptedSecret);
-    const matchedStep = isBypassAuthenticatorCode
-      ? 0
-      : findMatchingTotpStep(secret, code);
+    const secret = decryptTotpSecret(authenticator.encryptedSecret);
+    const matchedStep = findMatchingTotpStep(secret, code);
 
     if (matchedStep === null) {
       return res.status(400).json({
@@ -342,12 +332,10 @@ async function verifyAdminAuthenticator(req, res, next) {
       });
     }
 
-    const consumed = isBypassAuthenticatorCode
-      ? true
-      : await consumeEmployeeAuthenticatorStep(
-          employee.publicId,
-          matchedStep
-        );
+    const consumed = await consumeEmployeeAuthenticatorStep(
+      employee.publicId,
+      matchedStep
+    );
 
     if (!consumed) {
       return res.status(400).json({
