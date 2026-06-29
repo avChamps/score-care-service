@@ -96,6 +96,24 @@ async function getDashboardCounts(options = {}) {
             AND (subscription_due_at IS NULL OR subscription_due_at >= NOW())
           THEN 1 ELSE 0
         END) AS subscriptions,
+        SUM(CASE WHEN pan_number IS NULL OR pan_number = '' THEN 1 ELSE 0 END) AS otpLoginNoPan,
+        SUM(CASE
+          WHEN pan_number IS NOT NULL
+            AND pan_number <> ''
+            AND subscription_status = 'free'
+          THEN 1 ELSE 0
+        END) AS panSubmitted,
+        SUM(CASE
+          WHEN pan_number IS NOT NULL
+            AND pan_number <> ''
+            AND subscription_status = 'past_due'
+          THEN 1 ELSE 0
+        END) AS checkoutStarted,
+        SUM(CASE
+          WHEN subscription_status IN ('active', 'cancelled')
+            AND (subscription_due_at IS NULL OR subscription_due_at >= NOW())
+          THEN 1 ELSE 0
+        END) AS subscribed,
         SUM(CASE
           WHEN subscription_status IN ('active', 'cancelled')
             AND subscription_due_at > NOW()
@@ -323,11 +341,19 @@ async function getDashboardCounts(options = {}) {
     newUsers: Number(userCounts[0]?.newUsers || 0),
     subscriptions: Number(userCounts[0]?.subscriptions || 0),
     amount: totalRevenue,
+    basicSubscriptionRevenue: subscriptionRevenue,
+    creditRepairRevenue: cibilRepairRevenue,
     revenue: {
       total: totalRevenue,
+      basicSubscription: subscriptionRevenue,
+      creditRepair: cibilRepairRevenue,
       subscriptions: subscriptionRevenue,
       cibilRepair: cibilRepairRevenue
     },
+    otp_login_no_pan: Number(userCounts[0]?.otpLoginNoPan || 0),
+    pan_submitted: Number(userCounts[0]?.panSubmitted || 0),
+    checkout_started: Number(userCounts[0]?.checkoutStarted || 0),
+    subscribed: Number(userCounts[0]?.subscribed || 0),
     upcomingOverdues: Number(userCounts[0]?.upcomingOverdues || 0),
     totalMessages,
     totalFeedback,
@@ -449,7 +475,26 @@ function buildAdminUsersWhere(options = {}) {
     params.push(searchPattern, searchPattern, searchPattern, searchPattern, searchPattern);
   }
 
-  if (status) {
+  if (status === "otp_login_no_pan") {
+    conditions.push("(u.pan_number IS NULL OR u.pan_number = '')");
+  } else if (status === "pan_submitted") {
+    conditions.push(`(
+      u.pan_number IS NOT NULL
+      AND u.pan_number <> ''
+      AND u.subscription_status = 'free'
+    )`);
+  } else if (status === "checkout_started") {
+    conditions.push(`(
+      u.pan_number IS NOT NULL
+      AND u.pan_number <> ''
+      AND u.subscription_status = 'past_due'
+    )`);
+  } else if (status === "subscribed") {
+    conditions.push(`(
+      u.subscription_status IN ('active', 'cancelled')
+      AND (u.subscription_due_at IS NULL OR u.subscription_due_at >= NOW())
+    )`);
+  } else if (status) {
     conditions.push("u.status = ?");
     params.push(status);
   }
@@ -479,13 +524,31 @@ function buildAdminUsersWhere(options = {}) {
   };
 }
 
+function getCreditReportBureau(reportType) {
+  const type = String(reportType || "").toLowerCase();
+
+  if (type.includes("crif")) {
+    return "crif";
+  }
+
+  if (type.includes("experian")) {
+    return "experian";
+  }
+
+  return "cibil";
+}
+
 async function listAdminUsers(options = {}) {
   const page = Math.max(Number(options.page) || 1, 1);
   const limit = Math.min(Math.max(Number(options.limit) || 20, 1), 100);
   const offset = (page - 1) * limit;
   const { where, params } = buildAdminUsersWhere(options);
+  const { where: countsWhere, params: countsParams } = buildAdminUsersWhere({
+    ...options,
+    status: ""
+  });
 
-  const [[countRows], [rows]] = await Promise.all([
+  const [[countRows], [rows], [statusCountRows]] = await Promise.all([
     pool.query(
       `SELECT COUNT(*) AS total
       FROM users u
@@ -558,18 +621,232 @@ async function listAdminUsers(options = {}) {
       LIMIT ?
       OFFSET ?`,
       [...params, limit, offset]
+    ),
+    pool.query(
+      `SELECT
+        SUM(CASE WHEN u.pan_number IS NULL OR u.pan_number = '' THEN 1 ELSE 0 END) AS otpLoginNoPan,
+        SUM(CASE
+          WHEN u.pan_number IS NOT NULL
+            AND u.pan_number <> ''
+            AND u.subscription_status = 'free'
+          THEN 1 ELSE 0
+        END) AS panSubmitted,
+        SUM(CASE
+          WHEN u.pan_number IS NOT NULL
+            AND u.pan_number <> ''
+            AND u.subscription_status = 'past_due'
+          THEN 1 ELSE 0
+        END) AS checkoutStarted,
+        SUM(CASE
+          WHEN u.subscription_status IN ('active', 'cancelled')
+            AND (u.subscription_due_at IS NULL OR u.subscription_due_at >= NOW())
+          THEN 1 ELSE 0
+        END) AS subscribed
+      FROM users u
+      ${countsWhere}`,
+      countsParams
     )
   ]);
   const total = Number(countRows[0]?.total || 0);
+  const statusCounts = statusCountRows[0] || {};
 
   return {
     users: rows.map(mapAdminUser),
+    counts: {
+      otp_login_no_pan: Number(statusCounts.otpLoginNoPan || 0),
+      pan_submitted: Number(statusCounts.panSubmitted || 0),
+      checkout_started: Number(statusCounts.checkoutStarted || 0),
+      subscribed: Number(statusCounts.subscribed || 0)
+    },
     pagination: {
       page,
       limit,
       total,
       totalPages: Math.ceil(total / limit)
     }
+  };
+}
+
+async function findAdminUserDetailByPublicId(publicId) {
+  const [userRows] = await pool.query(
+    `SELECT
+      u.id AS internalUserId,
+      u.public_id AS publicId,
+      u.full_name AS fullName,
+      u.mobile_number AS mobileNumber,
+      u.pan_number AS panNumber,
+      u.email,
+      u.date_of_birth AS dateOfBirth,
+      u.is_admin AS isAdmin,
+      u.status,
+      CASE
+        WHEN u.subscription_status IN ('active', 'cancelled')
+          AND (u.subscription_due_at IS NULL OR u.subscription_due_at >= NOW())
+        THEN 'paid'
+        ELSE 'free'
+      END AS accessType,
+      u.subscription_status AS subscriptionStatus,
+      COALESCE(payments.subscriptionAmount, 0) AS subscriptionAmount,
+      latestPayment.amount AS latestSubscriptionAmount,
+      planUpdatedBy.public_id AS planUpdatedById,
+      planUpdatedBy.full_name AS planUpdatedByFullName,
+      planUpdatedBy.mobile_number AS planUpdatedByMobileNumber,
+      u.subscription_started_at AS subscriptionStartedAt,
+      u.subscription_due_at AS subscriptionDueAt,
+      u.subscription_ends_at AS subscriptionEndsAt,
+      cr.credit_score AS creditScore,
+      cr.fetched_at AS creditScoreLastCheckedAt,
+      COALESCE(messages.totalMessages, 0) AS totalMessages,
+      COALESCE(loans.totalLoans, 0) AS totalLoans,
+      latestLoan.status AS latestLoanStatus,
+      latestLoan.created_at AS latestLoanAppliedAt,
+      u.last_login_at AS lastLoginAt,
+      u.created_at AS createdAt,
+      u.updated_at AS updatedAt
+    FROM users u
+    LEFT JOIN credit_reports cr
+      ON cr.user_id = u.id
+      AND cr.provider = 'surepass'
+      AND cr.report_type = 'experian_score'
+    LEFT JOIN (
+      SELECT user_id, COUNT(*) AS totalMessages
+      FROM ai_prompt_messages
+      GROUP BY user_id
+    ) messages ON messages.user_id = u.id
+    LEFT JOIN (
+      SELECT user_id, COUNT(*) AS totalLoans, MAX(id) AS latestLoanId
+      FROM loan_applications
+      GROUP BY user_id
+    ) loans ON loans.user_id = u.id
+    LEFT JOIN loan_applications latestLoan
+      ON latestLoan.id = loans.latestLoanId
+    LEFT JOIN (
+      SELECT user_id, SUM(amount) AS subscriptionAmount, MAX(id) AS latestPaymentId
+      FROM subscription_payments
+      WHERE payment_status = 'paid'
+      GROUP BY user_id
+    ) payments ON payments.user_id = u.id
+    LEFT JOIN subscription_payments latestPayment
+      ON latestPayment.id = payments.latestPaymentId
+    LEFT JOIN users planUpdatedBy
+      ON planUpdatedBy.id = latestPayment.updated_by_user_id
+    WHERE u.public_id = ?
+    LIMIT 1`,
+    [publicId]
+  );
+
+  if (userRows.length === 0) {
+    return null;
+  }
+
+  const userRow = userRows[0];
+  const userId = userRow.internalUserId;
+  const [[creditReports], [loginEvents], [apiHits], [payments], [loanApplications]] =
+    await Promise.all([
+      pool.query(
+        `SELECT
+          report_type AS reportType,
+          credit_score AS creditScore,
+          provider_message AS providerMessage,
+          provider_status_code AS providerStatusCode,
+          fetched_at AS fetchedAt
+        FROM credit_reports
+        WHERE user_id = ?
+        ORDER BY fetched_at DESC, id DESC`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT login_method AS loginMethod, login_status AS loginStatus, logged_in_at AS loggedInAt
+        FROM user_login_events
+        WHERE user_id = ?
+        ORDER BY logged_in_at DESC
+        LIMIT 5`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT bureau_type AS bureauType, operation_type AS operationType, success, created_at AS createdAt
+        FROM credit_bureau_api_hits
+        WHERE requested_by_user_id = ?
+        ORDER BY created_at DESC
+        LIMIT 5`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT payment_status AS paymentStatus, amount, currency, created_at AS createdAt, paid_at AS paidAt
+        FROM subscription_payments
+        WHERE user_id = ?
+        ORDER BY COALESCE(paid_at, created_at) DESC, id DESC
+        LIMIT 5`,
+        [userId]
+      ),
+      pool.query(
+        `SELECT loan_type AS loanType, status, created_at AS createdAt
+        FROM loan_applications
+        WHERE user_id = ?
+        ORDER BY created_at DESC, id DESC
+        LIMIT 5`,
+        [userId]
+      )
+    ]);
+
+  const recentActivity = [
+    ...loginEvents.map((event) => ({
+      type: "login",
+      label: `${event.loginMethod} login`,
+      status: event.loginStatus,
+      occurredAt: event.loggedInAt
+    })),
+    ...apiHits.map((hit) => ({
+      type: "credit_bureau_api",
+      label: `${hit.bureauType} ${hit.operationType}`,
+      status: hit.success ? "success" : "failed",
+      occurredAt: hit.createdAt
+    })),
+    ...payments.map((payment) => ({
+      type: "subscription_payment",
+      label: "Subscription payment",
+      status: payment.paymentStatus,
+      amount: Number(payment.amount || 0),
+      currency: payment.currency,
+      occurredAt: payment.paidAt || payment.createdAt
+    })),
+    ...loanApplications.map((loan) => ({
+      type: "loan_application",
+      label: `${loan.loanType} loan application`,
+      status: loan.status,
+      occurredAt: loan.createdAt
+    }))
+  ]
+    .sort((a, b) => new Date(b.occurredAt) - new Date(a.occurredAt))
+    .slice(0, 10);
+
+  return {
+    user: mapAdminUser(userRow),
+    kycStatus: {
+      pan: {
+        status: userRow.panNumber ? "verified" : "pending",
+        verifiedAt: userRow.panNumber ? userRow.updatedAt : null
+      },
+      profile: {
+        status:
+          userRow.fullName && userRow.email && userRow.dateOfBirth
+            ? "completed"
+            : "pending",
+        completedAt:
+          userRow.fullName && userRow.email && userRow.dateOfBirth
+            ? userRow.updatedAt
+            : null
+      }
+    },
+    bureauScores: creditReports.map((report) => ({
+      bureau: getCreditReportBureau(report.reportType),
+      reportType: report.reportType,
+      creditScore: report.creditScore,
+      providerStatusCode: report.providerStatusCode,
+      providerMessage: report.providerMessage,
+      syncedAt: report.fetchedAt
+    })),
+    recentActivity
   };
 }
 
@@ -1195,6 +1472,7 @@ module.exports = {
   exportAdminLoans,
   exportAdminUsers,
   findAdminLoanById,
+  findAdminUserDetailByPublicId,
   getDashboardCounts,
   listAdminChats,
   listAdminBasicSubscriptions,

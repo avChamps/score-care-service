@@ -2,6 +2,7 @@ const {
   exportAdminLoans,
   exportAdminUsers,
   findAdminLoanById,
+  findAdminUserDetailByPublicId,
   getDashboardCounts,
   listAdminBasicSubscriptions,
   listAdminChats,
@@ -54,6 +55,26 @@ async function getAdminUsers(req, res, next) {
       from: req.query.from,
       totime: req.query.totime
     });
+
+    return res.status(200).json({
+      status: "success",
+      data
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getAdminUserDetail(req, res, next) {
+  try {
+    const data = await findAdminUserDetailByPublicId(req.params.publicId);
+
+    if (!data) {
+      return res.status(404).json({
+        status: "error",
+        message: "User not found"
+      });
+    }
 
     return res.status(200).json({
       status: "success",
@@ -554,6 +575,7 @@ module.exports = {
   getAdminBasicSubscriptions,
   getAdminDashboardCounts,
   getAdminLoans,
+  getAdminUserDetail,
   getAdminUsers,
   updateAdminLoan,
   updateAdminUserSubscription

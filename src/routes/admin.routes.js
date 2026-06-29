@@ -7,6 +7,7 @@ const {
   getAdminChats,
   getAdminDashboardCounts,
   getAdminLoans,
+  getAdminUserDetail,
   getAdminUsers,
   updateAdminLoan,
   updateAdminUserSubscription
@@ -235,6 +236,7 @@ router.patch("/loans/:loanId", requireAuth, requireAdmin, updateAdminLoan);
 router.get("/loans/:loanId/download-details", requireAuth, requireAdmin, downloadAdminLoanDetails);
 router.get("/users/export", requireAuth, requireAdmin, exportAdminUsersCsv);
 router.get("/users", requireAuth, requireAdmin, getAdminUsers);
+router.get("/users/:publicId", requireAuth, requireAdmin, getAdminUserDetail);
 router.post(
   "/users/:publicId/subscription",
   requireAuth,
