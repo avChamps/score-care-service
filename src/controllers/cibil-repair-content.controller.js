@@ -8,14 +8,26 @@ const {
   updateCibilRepairTimeline
 } = require("../models/cibil-repair-content.model");
 const {
+  assignCibilRepairRequestEmployee,
+  createCibilRepairRequestTimeline,
   createCibilRepairRequest,
+  findAdminCibilRepairRequestDetail,
   findCibilRepairRequestByPublicId,
   findCibilRepairRequestByPublicIdAndUserId,
   findLatestCibilRepairRequestByUserId,
+  listCibilRepairRequestTimelines,
   listCibilRepairRequestsByUserId,
   listCibilRepairRequests,
+  updateCibilRepairRequestAccounts,
   updateCibilRepairRequest
 } = require("../models/cibil-repair-request.model");
+const {
+  createCreditRepairDocument,
+  listCreditRepairDocumentsByUserIdAndAccountNumbers
+} = require("../models/credit-repair-document.model");
+const {
+  createDispute
+} = require("../models/dispute.model");
 const {
   createAdminCreditRepairNotification
 } = require("../models/admin-notification.model");
@@ -23,8 +35,13 @@ const {
   countUnreadNotificationsByUserPublicId,
   createCibilRepairRequestCreatedNotification,
   createCibilRepairRequestUpdatedNotification,
+  createCreditDisputeSubmittedNotification,
   listNotificationsByUserPublicId
 } = require("../models/notification.model");
+const {
+  findEmployeeByPublicId,
+  findEmployeeByPublicIdOrCode
+} = require("../models/employee.model");
 const { findUserById, findUserByPublicId } = require("../models/user.model");
 const {
   createRazorpayOrder,
@@ -38,13 +55,19 @@ const {
 const {
   sendCreditImprovedWhatsapp,
   sendDisputeStatusWhatsapp,
+  sendManualUserWhatsapp,
   sendWhatsAppSafely
 } = require("../services/whatsappNotification.service");
+const {
+  deleteSavedFiles,
+  saveCreditRepairDocumentFile
+} = require("../utils/upload-assets");
 
 const paymentStatuses = new Set(["pending", "paid", "failed", "refunded"]);
 const repairStatuses = new Set([
   "upload_document",
   "submitted",
+  "under_review",
   "analysis",
   "in_progress",
   "resolved",
@@ -54,6 +77,7 @@ const repairStatuses = new Set([
 const activeRepairStatuses = new Set([
   "upload_document",
   "submitted",
+  "under_review",
   "analysis",
   "in_progress"
 ]);
@@ -568,6 +592,105 @@ function validateAdminCibilRepairRequestPayload(body) {
   };
 }
 
+function formatFileSize(bytes) {
+  if (!Number(bytes)) {
+    return null;
+  }
+
+  const kb = Number(bytes) / 1024;
+
+  return `${kb < 10 ? kb.toFixed(1) : Math.round(kb)} KB`;
+}
+
+function getAccountKey(account) {
+  return String(account?.id || account?.accountId || account?.accountNumber || "").trim();
+}
+
+function findRepairAccount(accounts, accountId) {
+  const key = normalizeString(accountId);
+
+  return (accounts || []).find((account, index) => (
+    getAccountKey(account) === key || String(index + 1) === key
+  ));
+}
+
+function mapAdminRepairDetail(request, documents, timeline) {
+  return {
+    publicId: request.publicId,
+    userName: request.userName,
+    mobileNumber: request.mobileNumber,
+    email: request.email,
+    planName: request.planName,
+    amount: request.amount,
+    currency: request.currency,
+    paymentStatus: request.paymentStatus,
+    repairStatus: request.repairStatus,
+    bureau: request.bureau || request.accounts?.[0]?.bureau || request.accounts?.[0]?.bureauName || null,
+    remarks: request.remarks,
+    accounts: (request.accounts || []).map((account, index) => ({
+      id: account.id || index + 1,
+      subscriberName: account.subscriberName || account.bankName || account.lenderName || null,
+      accountType: account.accountType || null,
+      accountNumber: account.accountNumber || null,
+      issueType: account.issueType || null,
+      disputeStatus: account.disputeStatus || "not_filed"
+    })),
+    documents: documents.map((document) => ({
+      id: document.id,
+      documentType: document.documentType,
+      documentUrl: document.documentUrl,
+      fileSize: formatFileSize(document.fileSize),
+      createdAt: document.createdAt
+    })),
+    timeline: timeline.length
+      ? timeline
+      : [{
+          id: 0,
+          title: "Case created",
+          description: request.paymentStatus === "paid" ? "Payment confirmed" : "Request created",
+          actorName: "System",
+          createdAt: request.createdAt
+        }],
+    assignedEmployee: request.assignedEmployee,
+    createdAt: request.createdAt,
+    updatedAt: request.updatedAt
+  };
+}
+
+async function getAdminActorName(req) {
+  if (req.auth.tokenType === "employee_access" && req.auth.employeeId) {
+    const employee = await findEmployeeByPublicId(req.auth.employeeId);
+
+    return employee?.fullName || "Admin";
+  }
+
+  const user = req.auth.internalUserId ? await findUserById(req.auth.internalUserId) : null;
+
+  return user?.fullName || "Admin";
+}
+
+function isFullAccessEmployee(employee) {
+  const role = normalizeString(employee?.role || employee?.roleName).toLowerCase();
+
+  return ["admin", "super_admin", "super admin", "administrator"].includes(role);
+}
+
+async function getAdminCibilRepairRequestScope(req) {
+  if (req.auth.tokenType !== "employee_access") {
+    return {};
+  }
+
+  const employee = await findEmployeeByPublicId(req.auth.employeeId);
+
+  if (isFullAccessEmployee(employee)) {
+    return {};
+  }
+
+  return {
+    assignedEmployeeId: req.auth.internalEmployeeId
+  };
+}
+
 async function getCibilRepairContent(_req, res, next) {
   try {
     const content = await listActiveCibilRepairContent();
@@ -883,6 +1006,7 @@ async function getMyCibilRepairStatus(req, res, next) {
 
 async function getAdminCibilRepairRequests(req, res, next) {
   try {
+    const scope = await getAdminCibilRepairRequestScope(req);
     const data = await listCibilRepairRequests({
       page: req.query.page,
       limit: req.query.limit,
@@ -890,12 +1014,45 @@ async function getAdminCibilRepairRequests(req, res, next) {
       repairStatus: req.query.repairStatus || req.query.status,
       paymentStatus: req.query.paymentStatus,
       from: req.query.from,
-      totime: req.query.totime
+      totime: req.query.totime,
+      assignedEmployeeId: scope.assignedEmployeeId
     });
 
     return res.status(200).json({
       status: "success",
       data
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getAdminCibilRepairRequestDetail(req, res, next) {
+  try {
+    const scope = await getAdminCibilRepairRequestScope(req);
+    const request = await findAdminCibilRepairRequestDetail(
+      req.params.publicId,
+      scope
+    );
+
+    if (!request) {
+      return res.status(404).json({
+        status: "error",
+        message: "CIBIL repair request not found"
+      });
+    }
+
+    const [documents, timeline] = await Promise.all([
+      listCreditRepairDocumentsByUserIdAndAccountNumbers(
+        request.internalUserId,
+        request.accounts.map((account) => account.accountNumber)
+      ),
+      listCibilRepairRequestTimelines(req.params.publicId)
+    ]);
+
+    return res.status(200).json({
+      status: "success",
+      data: mapAdminRepairDetail(request, documents, timeline)
     });
   } catch (error) {
     next(error);
@@ -913,7 +1070,11 @@ async function updateAdminCibilRepairRequest(req, res, next) {
       });
     }
 
-    const existingRequest = await findCibilRepairRequestByPublicId(req.params.publicId);
+    const scope = await getAdminCibilRepairRequestScope(req);
+    const existingRequest = await findAdminCibilRepairRequestDetail(
+      req.params.publicId,
+      scope
+    );
 
     if (!existingRequest) {
       return res.status(404).json({
@@ -940,11 +1101,17 @@ async function updateAdminCibilRepairRequest(req, res, next) {
     }
 
     const user = await findUserByPublicId(request.userPublicId);
+    const actorName = await getAdminActorName(req);
+    await createCibilRepairRequestTimeline(req.params.publicId, {
+      title: "Case updated",
+      description: value.remarks || `Status updated to ${request.repairStatus}`,
+      actorName
+    });
     const notification = await createCibilRepairRequestUpdatedNotification(
       user.internalId,
       request
     );
-    await sendStoredNotificationToUser(user.internalId, notification);
+    const appNotificationPush = await sendStoredNotificationToUser(user.internalId, notification);
     const disputeWhatsapp = await sendWhatsAppSafely(() => sendDisputeStatusWhatsapp(
       user,
       request
@@ -957,10 +1124,11 @@ async function updateAdminCibilRepairRequest(req, res, next) {
       status: "success",
       message: "CIBIL repair request updated successfully",
       data: {
-        request,
-        notification,
-        disputeWhatsapp,
-        creditImprovedWhatsapp
+        publicId: request.publicId,
+        repairStatus: request.repairStatus,
+        remarks: request.remarks,
+        updatedAt: request.updatedAt,
+        appNotificationPush
       }
     });
   } catch (error) {
@@ -968,18 +1136,292 @@ async function updateAdminCibilRepairRequest(req, res, next) {
   }
 }
 
+async function assignAdminCibilRepairRequestEmployee(req, res, next) {
+  try {
+    const scope = await getAdminCibilRepairRequestScope(req);
+
+    if (scope.assignedEmployeeId) {
+      return res.status(403).json({
+        status: "error",
+        message: "Only admin can assign credit repair cases"
+      });
+    }
+
+    const employeePublicId = normalizeString(req.body.employeePublicId);
+
+    if (!employeePublicId) {
+      return res.status(400).json({
+        status: "error",
+        errors: ["employeePublicId is required"]
+      });
+    }
+
+    const [existingRequest, employee] = await Promise.all([
+      findAdminCibilRepairRequestDetail(req.params.publicId),
+      findEmployeeByPublicIdOrCode(employeePublicId)
+    ]);
+
+    if (!existingRequest) {
+      return res.status(404).json({
+        status: "error",
+        message: "CIBIL repair request not found"
+      });
+    }
+
+    if (!employee || employee.status !== "active" || employee.deletedAt) {
+      return res.status(404).json({
+        status: "error",
+        message: "Employee not found"
+      });
+    }
+
+    const request = await assignCibilRepairRequestEmployee(
+      req.params.publicId,
+      employee.internalId
+    );
+    const actorName = await getAdminActorName(req);
+    await createCibilRepairRequestTimeline(req.params.publicId, {
+      title: "Employee assigned",
+      description: `${employee.fullName} assigned to this case`,
+      actorName
+    });
+
+    if (parseOptionalBoolean(req.body.notifyUser)) {
+      const user = await findUserByPublicId(request.userPublicId);
+      const notification = await createCibilRepairRequestUpdatedNotification(
+        user.internalId,
+        request
+      );
+      await sendStoredNotificationToUser(user.internalId, notification);
+    }
+
+    return res.status(200).json({
+      status: "success",
+      message: "Employee assigned successfully",
+      data: {
+        publicId: request.publicId,
+        assignedEmployee: request.assignedEmployee
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function uploadAdminCibilRepairRequestDocument(req, res, next) {
+  let savedFile = null;
+
+  try {
+    const scope = await getAdminCibilRepairRequestScope(req);
+    const request = await findAdminCibilRepairRequestDetail(
+      req.params.publicId,
+      scope
+    );
+
+    if (!request) {
+      return res.status(404).json({
+        status: "error",
+        message: "CIBIL repair request not found"
+      });
+    }
+
+    const documentType = normalizeString(req.body.documentType || "additional_document");
+    const accountNumber = normalizeString(req.body.accountNumber);
+    const account = (request.accounts || []).find((item) => (
+      normalizeString(item.accountNumber) === accountNumber
+    ));
+    const errors = [];
+
+    if (!documentType) {
+      errors.push("documentType is required");
+    }
+
+    if (!accountNumber) {
+      errors.push("accountNumber is required");
+    }
+
+    if (!req.file) {
+      errors.push("document is required");
+    }
+
+    if (errors.length > 0) {
+      return res.status(400).json({
+        status: "error",
+        errors
+      });
+    }
+
+    savedFile = await saveCreditRepairDocumentFile(request.userPublicId, req.file);
+    const document = await createCreditRepairDocument(request.internalUserId, {
+      creditReportId: normalizeNullableString(req.body.creditReportId),
+      accountNumber,
+      accountType: normalizeString(req.body.accountType || account?.accountType || "additional_document"),
+      bankName: normalizeNullableString(req.body.bankName || account?.subscriberName || account?.bankName),
+      issueType: normalizeNullableString(req.body.issueType || account?.issueType),
+      documentType,
+      documentUrl: savedFile.url,
+      fileSize: req.file.size,
+      closingDate: normalizeNullableString(req.body.closingDate),
+      remarks: normalizeNullableString(req.body.remarks)
+    });
+    const actorName = await getAdminActorName(req);
+    await createCibilRepairRequestTimeline(req.params.publicId, {
+      title: "Document uploaded",
+      description: `${documentType} uploaded`,
+      actorName
+    });
+
+    return res.status(201).json({
+      status: "success",
+      message: "Document uploaded successfully",
+      data: {
+        id: document.id,
+        documentType: document.documentType,
+        documentUrl: document.documentUrl,
+        createdAt: document.createdAt
+      }
+    });
+  } catch (error) {
+    if (savedFile) {
+      await deleteSavedFiles({ document: [savedFile] }).catch(() => null);
+    }
+
+    next(error);
+  }
+}
+
+async function fileAdminCibilRepairAccountDispute(req, res, next) {
+  try {
+    const scope = await getAdminCibilRepairRequestScope(req);
+    const request = await findAdminCibilRepairRequestDetail(
+      req.params.publicId,
+      scope
+    );
+
+    if (!request) {
+      return res.status(404).json({
+        status: "error",
+        message: "CIBIL repair request not found"
+      });
+    }
+
+    const account = findRepairAccount(request.accounts, req.params.accountId);
+
+    if (!account) {
+      return res.status(404).json({
+        status: "error",
+        message: "Repair account not found"
+      });
+    }
+
+    const remarks = normalizeNullableString(req.body.remarks);
+    const dispute = await createDispute(
+      request.internalUserId,
+      request.userPublicId,
+      {
+        accountData: account,
+        lenderName: account.subscriberName || account.bankName || account.lenderName,
+        accountNumber: account.accountNumber,
+        errorType: account.issueType || "credit_repair_dispute",
+        bureaus: [request.bureau || account.bureau || account.bureauName || "CIBIL"],
+        additionalDetails: remarks,
+        documents: {}
+      }
+    );
+    const updatedAccounts = request.accounts.map((item, index) => (
+      item === account || getAccountKey(item) === getAccountKey(account) || String(index + 1) === normalizeString(req.params.accountId)
+        ? { ...item, disputeStatus: "submitted", disputePublicId: dispute.publicId }
+        : item
+    ));
+
+    await updateCibilRepairRequestAccounts(req.params.publicId, updatedAccounts);
+    const actorName = await getAdminActorName(req);
+    await createCibilRepairRequestTimeline(req.params.publicId, {
+      title: "Dispute filed",
+      description: remarks || `Dispute filed for account ${account.accountNumber || req.params.accountId}`,
+      actorName
+    });
+
+    if (parseOptionalBoolean(req.body.notifyUser)) {
+      const notification = await createCreditDisputeSubmittedNotification(
+        request.internalUserId,
+        dispute
+      );
+      await sendStoredNotificationToUser(request.internalUserId, notification);
+    }
+
+    return res.status(201).json({
+      status: "success",
+      message: "Dispute filed successfully",
+      data: {
+        disputePublicId: dispute.publicId,
+        disputeStatus: dispute.status
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function sendAdminCibilRepairWhatsapp(req, res, next) {
+  try {
+    const message = normalizeString(req.body.message);
+
+    if (!message) {
+      return res.status(400).json({
+        status: "error",
+        errors: ["message is required"]
+      });
+    }
+
+    const scope = await getAdminCibilRepairRequestScope(req);
+    const request = await findAdminCibilRepairRequestDetail(
+      req.params.publicId,
+      scope
+    );
+
+    if (!request) {
+      return res.status(404).json({
+        status: "error",
+        message: "CIBIL repair request not found"
+      });
+    }
+
+    const user = await findUserByPublicId(request.userPublicId);
+    await sendWhatsAppSafely(() => sendManualUserWhatsapp(user, message));
+    const actorName = await getAdminActorName(req);
+    await createCibilRepairRequestTimeline(req.params.publicId, {
+      title: "WhatsApp sent",
+      description: message,
+      actorName
+    });
+
+    return res.status(200).json({
+      status: "success",
+      message: "WhatsApp notification sent successfully"
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 module.exports = {
+  assignAdminCibilRepairRequestEmployee,
   createAdminCibilRepairTimeline,
   createMyCibilRepairPaymentOrder,
   createMyCibilRepairRequest,
   deleteAdminCibilRepairTimeline,
+  fileAdminCibilRepairAccountDispute,
   getAdminCibilRepairContent,
+  getAdminCibilRepairRequestDetail,
   getAdminCibilRepairRequests,
   getCibilRepairContent,
   getMyCibilRepairRequest,
   getMyCibilRepairRequestById,
   getMyCibilRepairStatus,
   saveAdminCibilRepairContent,
+  sendAdminCibilRepairWhatsapp,
+  uploadAdminCibilRepairRequestDocument,
   updateAdminCibilRepairTimeline,
   updateAdminCibilRepairRequest
 };

@@ -15,6 +15,7 @@ function mapCreditRepairDocument(row) {
     issueType: row.issueType,
     documentType: row.documentType,
     documentUrl: row.documentUrl,
+    fileSize: row.fileSize === null || row.fileSize === undefined ? null : Number(row.fileSize),
     closingDate: row.closingDate,
     remarks: row.remarks,
     createdAt: row.createdAt,
@@ -33,6 +34,7 @@ function creditRepairDocumentSelect() {
     issue_type AS issueType,
     document_type AS documentType,
     document_url AS documentUrl,
+    file_size AS fileSize,
     closing_date AS closingDate,
     remarks,
     created_at AS createdAt,
@@ -51,10 +53,11 @@ async function createCreditRepairDocument(userId, document) {
       issue_type,
       document_type,
       document_url,
+      file_size,
       closing_date,
       remarks
     )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       userId,
       document.creditReportId,
@@ -64,6 +67,7 @@ async function createCreditRepairDocument(userId, document) {
       document.issueType,
       document.documentType,
       document.documentUrl,
+      document.fileSize ?? null,
       document.closingDate,
       document.remarks
     ]
@@ -95,6 +99,26 @@ async function listCreditRepairDocumentsByUserId(userId) {
   return rows.map(mapCreditRepairDocument);
 }
 
+async function listCreditRepairDocumentsByUserIdAndAccountNumbers(userId, accountNumbers) {
+  const numbers = [...new Set(
+    (accountNumbers || []).map((accountNumber) => String(accountNumber || "").trim()).filter(Boolean)
+  )];
+
+  if (!numbers.length) {
+    return [];
+  }
+
+  const [rows] = await pool.query(
+    `${creditRepairDocumentSelect()}
+    WHERE user_id = ?
+      AND account_number IN (?)
+    ORDER BY created_at DESC, id DESC`,
+    [userId, numbers]
+  );
+
+  return rows.map(mapCreditRepairDocument);
+}
+
 async function listCreditRepairDocumentsByUserIds(userIds) {
   const ids = [...new Set(userIds.map(Number).filter(Boolean))];
 
@@ -114,6 +138,7 @@ async function listCreditRepairDocumentsByUserIds(userIds) {
 
 module.exports = {
   createCreditRepairDocument,
+  listCreditRepairDocumentsByUserIdAndAccountNumbers,
   listCreditRepairDocumentsByUserId,
   listCreditRepairDocumentsByUserIds
 };

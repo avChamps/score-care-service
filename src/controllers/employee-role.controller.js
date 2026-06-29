@@ -18,13 +18,21 @@ const defaultMenuAccess = [
   { menuName: "User management", childMenuName: "Users", permissions: ["read", "export"] },
   { menuName: "Employee management", childMenuName: "Employees", permissions: ["create", "read", "update", "delete"] },
   { menuName: "Employee management", childMenuName: "Roles", permissions: ["create", "read", "update", "delete"] },
-  { menuName: "Subscriptions", childMenuName: "Subscriptions", permissions: ["read", "update"] },
-  { menuName: "Plans & Benefits", childMenuName: "Basic plan", permissions: [] },
+  { menuName: "Employee management", childMenuName: "Login Events", permissions: ["read"] },
+  { menuName: "Subscriptions", childMenuName: "Subscription Plans", permissions: ["create", "read", "update"] },
+  { menuName: "Subscriptions", childMenuName: "Basic Subscriptions", permissions: ["read"] },
+  { menuName: "Plans & Benefits", childMenuName: "Basic plan", permissions: ["read", "update"] },
   { menuName: "Plans & Benefits", childMenuName: "Repair service", permissions: ["create", "read", "update", "delete"] },
+  { menuName: "Plans & Benefits", childMenuName: "Loan Options", permissions: ["create", "read", "update"] },
+  { menuName: "Credit Repair", childMenuName: "Repair Requests", permissions: ["create", "read", "update"] },
+  { menuName: "Disputes", childMenuName: null, permissions: ["read", "update"] },
+  { menuName: "Loans", childMenuName: null, permissions: ["read", "update", "export"] },
   { menuName: "Chats", childMenuName: null, permissions: ["read"] },
   { menuName: "Feedback", childMenuName: null, permissions: ["read"] },
   { menuName: "Contact Us", childMenuName: null, permissions: ["read"] },
+  { menuName: "Reports", childMenuName: "Credit Bureau API Hits", permissions: ["read"] },
   { menuName: "Reports", childMenuName: "Downloads", permissions: ["read", "export"] },
+  { menuName: "Reports", childMenuName: "Manual Downloads", permissions: ["read", "export"] },
   { menuName: "Reports", childMenuName: "Download CIBIL", permissions: ["read", "create"] }
 ];
 const roleStatuses = new Set(["active", "inactive"]);

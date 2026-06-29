@@ -79,7 +79,8 @@ async function uploadCreditRepairDocument(req, res, next) {
 
     const document = await createCreditRepairDocument(req.auth.internalUserId, {
       ...value,
-      documentUrl: savedFile.url
+      documentUrl: savedFile.url,
+      fileSize: req.file.size
     });
     const existingRequest = await findLatestCibilRepairRequestByUserId(
       req.auth.internalUserId

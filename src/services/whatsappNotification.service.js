@@ -232,6 +232,10 @@ async function sendDisputeStatusWhatsapp(user, request) {
   return sendUserWhatsappAlert(user, templates.disputeStatus(user, request));
 }
 
+async function sendManualUserWhatsapp(user, message) {
+  return sendUserWhatsappAlert(user, message);
+}
+
 async function sendCreditImprovedWhatsapp(user, request) {
   return sendUserWhatsappAlert(user, templates.creditImproved(user, request));
 }
@@ -247,6 +251,7 @@ module.exports = {
   sendFeedbackReceivedWhatsapp,
   sendFirstTimeWelcomeWhatsapp,
   sendInactiveUserWhatsapp,
+  sendManualUserWhatsapp,
   sendPaymentReminderWhatsapp,
   sendSubscriptionPaymentSuccessWhatsapp,
   sendSubscriptionRenewalWhatsapp,

@@ -70,12 +70,17 @@ const {
   saveAdminWebsiteSettingsDetails
 } = require("../controllers/website-setting.controller");
 const {
+  assignAdminCibilRepairRequestEmployee,
   createAdminCibilRepairTimeline,
   deleteAdminCibilRepairTimeline,
+  fileAdminCibilRepairAccountDispute,
   getAdminCibilRepairContent,
+  getAdminCibilRepairRequestDetail,
   getAdminCibilRepairRequests,
+  sendAdminCibilRepairWhatsapp,
   updateAdminCibilRepairTimeline,
   updateAdminCibilRepairRequest,
+  uploadAdminCibilRepairRequestDocument,
   saveAdminCibilRepairContent
 } = require("../controllers/cibil-repair-content.controller");
 const {
@@ -93,7 +98,10 @@ const {
   requireAdmin,
   requireAuth
 } = require("../middleware/auth.middleware");
-const { websiteSettingsDocumentUpload } = require("../utils/upload-assets");
+const {
+  adminCreditRepairDocumentUpload,
+  websiteSettingsDocumentUpload
+} = require("../utils/upload-assets");
 
 const router = express.Router();
 
@@ -179,11 +187,37 @@ router.post("/cibil-repair-content/timelines", requireAuth, requireAdmin, create
 router.patch("/cibil-repair-content/timelines/:publicId", requireAuth, requireAdmin, updateAdminCibilRepairTimeline);
 router.delete("/cibil-repair-content/timelines/:publicId", requireAuth, requireAdmin, deleteAdminCibilRepairTimeline);
 router.get("/cibil-repair-requests", requireAuth, requireAdmin, getAdminCibilRepairRequests);
+router.get("/cibil-repair-requests/:publicId", requireAuth, requireAdmin, getAdminCibilRepairRequestDetail);
 router.patch(
   "/cibil-repair-requests/:publicId",
   requireAuth,
   requireAdmin,
   updateAdminCibilRepairRequest
+);
+router.patch(
+  "/cibil-repair-requests/:publicId/assign",
+  requireAuth,
+  requireAdmin,
+  assignAdminCibilRepairRequestEmployee
+);
+router.post(
+  "/cibil-repair-requests/:publicId/documents",
+  requireAuth,
+  requireAdmin,
+  adminCreditRepairDocumentUpload,
+  uploadAdminCibilRepairRequestDocument
+);
+router.post(
+  "/cibil-repair-requests/:publicId/accounts/:accountId/dispute",
+  requireAuth,
+  requireAdmin,
+  fileAdminCibilRepairAccountDispute
+);
+router.post(
+  "/cibil-repair-requests/:publicId/notify/whatsapp",
+  requireAuth,
+  requireAdmin,
+  sendAdminCibilRepairWhatsapp
 );
 router.get("/loan-options", requireAuth, requireAdmin, getAdminLoanOptions);
 router.post("/loan-options", requireAuth, requireAdmin, saveAdminLoanOptions);

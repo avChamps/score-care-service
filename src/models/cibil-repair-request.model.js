@@ -48,6 +48,7 @@ function mapCibilRepairRequest(row) {
     razorpayOrderId: row.razorpayOrderId,
     razorpayPaymentId: row.razorpayPaymentId,
     repairStatus: row.repairStatus,
+    bureau: row.bureau,
     activeDisputes: Number(row.activeDisputes),
     resolvedDisputes: Number(row.resolvedDisputes),
     pointsGained: Number(row.pointsGained),
@@ -55,6 +56,12 @@ function mapCibilRepairRequest(row) {
     remarks: row.remarks,
     accounts: parseJson(row.accounts) || [],
     documents: row.documents || [],
+    assignedEmployee: row.assignedEmployeePublicId
+      ? {
+          publicId: row.assignedEmployeePublicId,
+          fullName: row.assignedEmployeeFullName
+        }
+      : null,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt
   };
@@ -117,6 +124,7 @@ function requestSelect() {
     progress_items AS progressItems,
     remarks,
     accounts,
+    bureau,
     created_at AS createdAt,
     updated_at AS updatedAt
   FROM cibil_repair_requests`;
@@ -215,6 +223,7 @@ async function listCibilRepairRequests(options = {}) {
   const search = String(options.search || "").trim();
   const repairStatus = String(options.repairStatus || options.status || "").trim();
   const paymentStatus = String(options.paymentStatus || "").trim();
+  const assignedEmployeeId = Number(options.assignedEmployeeId) || null;
   const from = String(options.from || "").trim();
   const totime = String(options.totime || "").trim();
   const conditions = [];
@@ -241,6 +250,11 @@ async function listCibilRepairRequests(options = {}) {
   if (paymentStatus) {
     conditions.push("crr.payment_status = ?");
     params.push(paymentStatus);
+  }
+
+  if (assignedEmployeeId) {
+    conditions.push("crr.assigned_employee_id = ?");
+    params.push(assignedEmployeeId);
   }
 
   if (from) {
@@ -289,15 +303,19 @@ async function listCibilRepairRequests(options = {}) {
       crr.progress_items AS progressItems,
       crr.remarks,
       crr.accounts,
+      crr.bureau,
+      ae.public_id AS assignedEmployeePublicId,
+      ae.full_name AS assignedEmployeeFullName,
       crr.created_at AS createdAt,
       crr.updated_at AS updatedAt
     FROM cibil_repair_requests crr
     INNER JOIN users u ON u.id = crr.user_id
+    LEFT JOIN employees ae ON ae.id = crr.assigned_employee_id
     LEFT JOIN (
       SELECT
         user_id,
         SUM(CASE
-          WHEN repair_status IN ('upload_document', 'submitted', 'analysis', 'in_progress')
+          WHEN repair_status IN ('upload_document', 'submitted', 'under_review', 'analysis', 'in_progress')
           THEN 1 ELSE 0
         END) AS activeRepairRequests,
         SUM(CASE WHEN repair_status = 'resolved' THEN 1 ELSE 0 END) AS resolvedRepairRequests,
@@ -375,12 +393,134 @@ async function updateCibilRepairRequest(publicId, update) {
   return findCibilRepairRequestByPublicId(publicId);
 }
 
+async function findAdminCibilRepairRequestDetail(publicId, options = {}) {
+  const assignedEmployeeId = Number(options.assignedEmployeeId) || null;
+  const assignedEmployeeCondition = assignedEmployeeId
+    ? "AND crr.assigned_employee_id = ?"
+    : "";
+  const params = assignedEmployeeId
+    ? [publicId, assignedEmployeeId]
+    : [publicId];
+
+  const [rows] = await pool.query(
+    `SELECT
+      crr.id AS internalId,
+      crr.user_id AS internalUserId,
+      crr.public_id AS publicId,
+      crr.user_public_id AS userPublicId,
+      u.full_name AS userName,
+      u.email,
+      u.mobile_number AS mobileNumber,
+      crr.plan_public_id AS planPublicId,
+      crr.plan_name AS planName,
+      crr.amount,
+      crr.currency,
+      crr.payment_status AS paymentStatus,
+      crr.razorpay_order_id AS razorpayOrderId,
+      crr.razorpay_payment_id AS razorpayPaymentId,
+      crr.repair_status AS repairStatus,
+      crr.active_disputes AS activeDisputes,
+      crr.resolved_disputes AS resolvedDisputes,
+      crr.points_gained AS pointsGained,
+      crr.progress_items AS progressItems,
+      crr.remarks,
+      crr.accounts,
+      crr.bureau,
+      ae.public_id AS assignedEmployeePublicId,
+      ae.full_name AS assignedEmployeeFullName,
+      crr.created_at AS createdAt,
+      crr.updated_at AS updatedAt
+    FROM cibil_repair_requests crr
+    INNER JOIN users u ON u.id = crr.user_id
+    LEFT JOIN employees ae ON ae.id = crr.assigned_employee_id
+    WHERE crr.public_id = ?
+      ${assignedEmployeeCondition}
+    LIMIT 1`,
+    params
+  );
+
+  return mapCibilRepairRequest(rows[0]);
+}
+
+async function assignCibilRepairRequestEmployee(publicId, employeeId) {
+  const [result] = await pool.query(
+    `UPDATE cibil_repair_requests
+    SET assigned_employee_id = ?,
+      updated_at = NOW()
+    WHERE public_id = ?`,
+    [employeeId, publicId]
+  );
+
+  if (result.affectedRows === 0) {
+    return null;
+  }
+
+  return findAdminCibilRepairRequestDetail(publicId);
+}
+
+async function updateCibilRepairRequestAccounts(publicId, accounts) {
+  const [result] = await pool.query(
+    `UPDATE cibil_repair_requests
+    SET accounts = ?,
+      updated_at = NOW()
+    WHERE public_id = ?`,
+    [JSON.stringify(accounts || []), publicId]
+  );
+
+  return result.affectedRows > 0;
+}
+
+async function createCibilRepairRequestTimeline(publicId, timeline) {
+  const [result] = await pool.query(
+    `INSERT INTO cibil_repair_request_timelines (
+      request_id,
+      title,
+      description,
+      actor_name
+    )
+    SELECT id, ?, ?, ?
+    FROM cibil_repair_requests
+    WHERE public_id = ?`,
+    [
+      timeline.title,
+      timeline.description,
+      timeline.actorName,
+      publicId
+    ]
+  );
+
+  return result.insertId;
+}
+
+async function listCibilRepairRequestTimelines(publicId) {
+  const [rows] = await pool.query(
+    `SELECT
+      crt.id,
+      crt.title,
+      crt.description,
+      crt.actor_name AS actorName,
+      crt.created_at AS createdAt
+    FROM cibil_repair_request_timelines crt
+    INNER JOIN cibil_repair_requests crr ON crr.id = crt.request_id
+    WHERE crr.public_id = ?
+    ORDER BY crt.created_at ASC, crt.id ASC`,
+    [publicId]
+  );
+
+  return rows;
+}
+
 module.exports = {
+  assignCibilRepairRequestEmployee,
+  createCibilRepairRequestTimeline,
   createCibilRepairRequest,
+  findAdminCibilRepairRequestDetail,
   findCibilRepairRequestByPublicId,
   findCibilRepairRequestByPublicIdAndUserId,
   findLatestCibilRepairRequestByUserId,
   listCibilRepairRequestsByUserId,
   listCibilRepairRequests,
+  listCibilRepairRequestTimelines,
+  updateCibilRepairRequestAccounts,
   updateCibilRepairRequest
 };

@@ -185,7 +185,7 @@ async function getDashboardCounts(options = {}) {
       `SELECT
         COUNT(*) AS totalRepairRequests,
         SUM(CASE WHEN payment_status = 'paid' THEN 1 ELSE 0 END) AS paidRepairRequests,
-        SUM(CASE WHEN repair_status IN ('submitted', 'analysis', 'in_progress') THEN 1 ELSE 0 END) AS openRepairRequests,
+        SUM(CASE WHEN repair_status IN ('upload_document', 'submitted', 'under_review', 'analysis', 'in_progress') THEN 1 ELSE 0 END) AS openRepairRequests,
         SUM(CASE WHEN repair_status IN ('resolved', 'closed') THEN 1 ELSE 0 END) AS closedRepairRequests
       FROM cibil_repair_requests
       ${filters.repairRequests.where}`,

@@ -613,6 +613,23 @@ function creditRepairDocumentUpload(req, res, next) {
   });
 }
 
+function adminCreditRepairDocumentUpload(req, res, next) {
+  creditRepairDocumentMulter.single("document")(req, res, (error) => {
+    if (error) {
+      if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
+        return res.status(400).json({
+          status: "error",
+          message: "document must be 5MB or smaller"
+        });
+      }
+
+      return handleMulterError(error, req, res, next);
+    }
+
+    return next();
+  });
+}
+
 function homepageImageThemeUpload(req, res, next) {
   homepageImageThemeMulter.single("image")(req, res, (error) => {
     if (error) {
@@ -668,6 +685,7 @@ function disputeDocumentUpload(req, res, next) {
 }
 
 module.exports = {
+  adminCreditRepairDocumentUpload,
   creditRepairDocumentUpload,
   deleteSavedFiles,
   deleteDisputeUploadedFiles,

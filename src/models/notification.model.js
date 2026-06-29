@@ -49,6 +49,14 @@ function mapUserFcmToken(row) {
   };
 }
 
+function formatNotificationStatus(value) {
+  return String(value || "")
+    .split("_")
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
 function mapAdminSentNotification(row) {
   const notification = mapNotification(row);
 
@@ -437,10 +445,15 @@ async function createCreditDisputeStatusUpdatedNotification(userId, dispute) {
 }
 
 async function createCibilRepairRequestUpdatedNotification(userId, request) {
+  const repairStatus = formatNotificationStatus(request.repairStatus);
+  const message = request.remarks
+    ? `Your CIBIL dispute request status is ${repairStatus}. Remarks: ${request.remarks}`
+    : `Your CIBIL dispute request status is ${repairStatus}.`;
+
   return createNotification(userId, {
     type: "cibil_repair_request_updated",
     title: "CIBIL dispute updated",
-    message: `Your CIBIL dispute request status is ${request.repairStatus}.`,
+    message,
     notificationKey: `cibil_repair_request_updated:${request.id}:${Date.now()}`,
     data: {
       repairRequestId: request.id,

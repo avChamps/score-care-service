@@ -149,6 +149,18 @@ async function findEmployeeByPublicId(publicId) {
   return mapEmployee(rows[0]);
 }
 
+async function findEmployeeByPublicIdOrCode(value) {
+  const [rows] = await pool.query(
+    `${employeeSelect()}
+    WHERE public_id = ?
+      OR employee_code = ?
+    LIMIT 1`,
+    [value, value]
+  );
+
+  return mapEmployee(rows[0]);
+}
+
 async function findActiveEmployeeByMobileNumber(mobileNumber) {
   const [rows] = await pool.query(
     `${employeeSelect()}
@@ -462,6 +474,7 @@ module.exports = {
   deleteEmployeeByPublicId,
   findActiveEmployeeByMobileNumber,
   findEmployeeByPublicId,
+  findEmployeeByPublicIdOrCode,
   getEmployeeAuthenticator,
   listEmployeeLoginEvents,
   listEmployees,
