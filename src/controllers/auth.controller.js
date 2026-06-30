@@ -42,6 +42,7 @@ const {
 
 const mobilePattern = /^[6-9]\d{9}$/;
 const otpPattern = /^\d{4,9}$/;
+const userBypassMobileNumber = "8919484183";
 const userBypassOtp = "123456";
 
 function isProfileComplete(user) {
@@ -59,11 +60,14 @@ async function sendOtp(req, res, next) {
       });
     }
 
-    const otpResponse = {
-      type: "success",
-      message: "Bypass OTP generated successfully",
-      otp: userBypassOtp
-    };
+    const otpResponse =
+      mobileNumber === userBypassMobileNumber
+        ? {
+            type: "success",
+            message: "Bypass OTP generated successfully",
+            otp: userBypassOtp
+          }
+        : await sendMobileOtp(mobileNumber);
 
     return res.status(200).json({
       status: "success",

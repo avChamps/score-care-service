@@ -1,5 +1,6 @@
 const {
   createLoginEvent,
+  deleteUserById,
   findUserById,
   findUserByPublicId,
   getUserNotificationPreferences,
@@ -28,10 +29,17 @@ const {
 const {
   sendStoredNotificationToUser
 } = require("../services/mobile-notification.service");
+const {
+  sendMobileOtp,
+  verifyMobileOtp
+} = require("../services/msg91.service");
 
 const mobilePattern = /^[6-9]\d{9}$/;
 const panPattern = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const otpPattern = /^\d{4,9}$/;
+const accountDeletionBypassMobileNumber = "8919484183";
+const accountDeletionOtp = "123456";
 
 function getAuthInternalUserId(req) {
   return req.auth.internalUserId || req.auth.userId;
@@ -294,6 +302,84 @@ async function getMyProfile(req, res, next) {
   }
 }
 
+async function deleteMyAccount(req, res, next) {
+  try {
+    const user = await findUserById(getAuthInternalUserId(req));
+    const otp = String(req.body.otp || "").trim();
+
+    if (!user) {
+      return res.status(404).json({
+        status: "error",
+        message: "User not found"
+      });
+    }
+
+    if (!otpPattern.test(otp)) {
+      return res.status(400).json({
+        status: "error",
+        message: "Valid OTP is required"
+      });
+    }
+
+    if (user.mobileNumber === accountDeletionBypassMobileNumber) {
+      if (otp !== accountDeletionOtp) {
+        return res.status(400).json({
+          status: "error",
+          message: "Valid OTP is required"
+        });
+      }
+    } else {
+      await verifyMobileOtp(user.mobileNumber, otp);
+    }
+
+    const deleted = await deleteUserById(user.internalId);
+
+    if (!deleted) {
+      return res.status(404).json({
+        status: "error",
+        message: "User not found"
+      });
+    }
+
+    return res.status(200).json({
+      status: "success",
+      message: "Account deleted successfully"
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function sendDeleteAccountOtp(req, res, next) {
+  try {
+    const user = await findUserById(getAuthInternalUserId(req));
+
+    if (!user) {
+      return res.status(404).json({
+        status: "error",
+        message: "User not found"
+      });
+    }
+
+    const otpResponse =
+      user.mobileNumber === accountDeletionBypassMobileNumber
+        ? {
+            type: "success",
+            message: "Bypass OTP generated successfully",
+            otp: accountDeletionOtp
+          }
+        : await sendMobileOtp(user.mobileNumber);
+
+    return res.status(200).json({
+      status: "success",
+      message: "OTP sent successfully",
+      data: otpResponse
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
 function validateNotificationPreferencesPayload(body) {
   const errors = [];
 
@@ -380,10 +466,12 @@ async function getUserLoginEvents(req, res, next) {
 }
 
 module.exports = {
+  deleteMyAccount,
   getMyNotificationPreferences,
   getMyProfile,
   getUserLoginEvents,
   recordUserLogin,
+  sendDeleteAccountOtp,
   updateMyNotificationPreferences,
   updateMySelectedLanguage,
   updateMyProfile

@@ -18,6 +18,18 @@ async function saveApiHit(values) {
   }
 }
 
+function getSurepassErrorStatus(response) {
+  if (response.ok) {
+    return 502;
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    return 502;
+  }
+
+  return response.status;
+}
+
 async function postSurepass(path, payload, errorMessage, tracking) {
   if (!env.surepass.bearerToken) {
     const error = new Error("Surepass bearer token is required");
@@ -74,7 +86,7 @@ async function postSurepass(path, payload, errorMessage, tracking) {
     const error = new Error(
       responseBody.message || errorMessage
     );
-    error.statusCode = response.ok ? 502 : response.status;
+    error.statusCode = getSurepassErrorStatus(response);
     error.details = responseBody;
     throw error;
   }

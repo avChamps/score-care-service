@@ -108,6 +108,41 @@ async function findUserByPublicId(publicId) {
   return mapUser(rows[0]);
 }
 
+async function deleteUserById(userId) {
+  const connection = await pool.getConnection();
+
+  try {
+    await connection.beginTransaction();
+
+    await connection.query(
+      "DELETE FROM credit_disputes WHERE user_id = ?",
+      [userId]
+    );
+    await connection.query(
+      "UPDATE loan_applications SET updated_by_user_id = NULL WHERE updated_by_user_id = ?",
+      [userId]
+    );
+    await connection.query(
+      "UPDATE subscription_payments SET updated_by_user_id = NULL WHERE updated_by_user_id = ?",
+      [userId]
+    );
+
+    const [result] = await connection.query(
+      "DELETE FROM users WHERE id = ?",
+      [userId]
+    );
+
+    await connection.commit();
+
+    return result.affectedRows > 0;
+  } catch (error) {
+    await connection.rollback();
+    throw error;
+  } finally {
+    connection.release();
+  }
+}
+
 async function findUserByMobileNumber(mobileNumber) {
   const [rows] = await pool.query(
     `SELECT
@@ -420,6 +455,7 @@ async function listLoginEventsByUserId(userId, limit = 20) {
 
 module.exports = {
   createLoginEvent,
+  deleteUserById,
   findUserById,
   findUserByMobileNumber,
   findUserByPublicId,
