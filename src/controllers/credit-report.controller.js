@@ -1923,7 +1923,8 @@ async function getCibilCreditReport(req, res, next) {
 async function getCrifCreditScore(req, res, next) {
   try {
     const internalUserId = getAuthInternalUserId(req);
-    const savedReport = await findCrifScoreByUserId(internalUserId);
+    const savedReport = await findCrifScoreByUserId(internalUserId) ||
+      await findCrifReportByUserId(internalUserId);
 
     if (savedReport) {
       return res.status(200).json({
