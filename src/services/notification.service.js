@@ -104,14 +104,32 @@ function isInvalidTokenError(error) {
   return INVALID_TOKEN_ERROR_CODES.has(error?.code);
 }
 
+function maskToken(token) {
+  const value = String(token || "");
+
+  if (value.length <= 16) {
+    return value;
+  }
+
+  return `${value.slice(0, 8)}...${value.slice(-8)}`;
+}
+
+function normalizeTokenRecords(tokens) {
+  const tokenMap = new Map();
+
+  for (const token of tokens) {
+    const fcmToken = String(token?.fcmToken || token || "").trim();
+
+    if (fcmToken && !tokenMap.has(fcmToken)) {
+      tokenMap.set(fcmToken, typeof token === "object" ? token : { fcmToken });
+    }
+  }
+
+  return [...tokenMap.values()];
+}
+
 async function sendToTokens(tokens, payload) {
-  const uniqueTokens = [
-    ...new Set(
-      tokens
-        .map((token) => String(token || "").trim())
-        .filter(Boolean)
-    )
-  ];
+  const uniqueTokens = normalizeTokenRecords(tokens);
 
   if (!uniqueTokens.length) {
     return {
@@ -126,12 +144,29 @@ async function sendToTokens(tokens, payload) {
   let failureCount = 0;
   const invalidTokens = [];
 
-  for (const token of uniqueTokens) {
+  for (const tokenRecord of uniqueTokens) {
+    const token = tokenRecord.fcmToken;
+    const logContext = {
+      userId: tokenRecord.userId,
+      tokenId: tokenRecord.id,
+      platform: tokenRecord.platform,
+      deviceId: tokenRecord.deviceId,
+      token: maskToken(token),
+      type: payload.data?.type,
+      notificationId: payload.data?.notificationId
+    };
+
     try {
       await messaging.send(buildMessage(token, payload));
       successCount += 1;
+      console.info("[push-notification] sent", logContext);
     } catch (error) {
       failureCount += 1;
+      console.error("[push-notification] failed", {
+        ...logContext,
+        code: error.code,
+        message: error.message
+      });
 
       if (isInvalidTokenError(error)) {
         invalidTokens.push(token);
@@ -140,6 +175,13 @@ async function sendToTokens(tokens, payload) {
   }
 
   const disabledCount = await disableFcmTokens(invalidTokens);
+
+  if (disabledCount) {
+    console.warn("[push-notification] disabled invalid tokens", {
+      disabledCount,
+      tokens: invalidTokens.map(maskToken)
+    });
+  }
 
   return {
     successCount,
@@ -159,7 +201,7 @@ async function sendToUser(userId, payload = {}) {
 
   const tokens = await listActiveFcmTokensByUserIds([userId]);
 
-  return sendToTokens(tokens.map((token) => token.fcmToken), payload);
+  return sendToTokens(tokens, payload);
 }
 
 async function sendToMultipleUsers(userIds, payload = {}) {
@@ -173,7 +215,7 @@ async function sendToMultipleUsers(userIds, payload = {}) {
 
   const tokens = await listActiveFcmTokensByUserIds(userIds);
 
-  return sendToTokens(tokens.map((token) => token.fcmToken), payload);
+  return sendToTokens(tokens, payload);
 }
 
 async function sendToAllUsers(payload = {}) {
@@ -187,7 +229,7 @@ async function sendToAllUsers(payload = {}) {
 
   const tokens = await listAllActiveFcmTokens();
 
-  return sendToTokens(tokens.map((token) => token.fcmToken), payload);
+  return sendToTokens(tokens, payload);
 }
 
 module.exports = {
