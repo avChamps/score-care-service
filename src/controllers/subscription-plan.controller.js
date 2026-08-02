@@ -1,6 +1,7 @@
 const {
   createSubscriptionPlan,
   findSubscriptionPlanByPublicId,
+  findUserSubscriptionStatus,
   getDateFromUnix,
   listActiveSubscriptionPlans,
   listAllSubscriptionPlans,
@@ -41,6 +42,28 @@ async function getSubscriptionPlans(_req, res, next) {
       status: "success",
       data: {
         plans
+      }
+    });
+  } catch (error) {
+    next(error);
+  }
+}
+
+async function getMySubscriptionStatus(req, res, next) {
+  try {
+    const subscription = await findUserSubscriptionStatus(req.auth.internalUserId);
+
+    if (!subscription) {
+      return res.status(404).json({
+        status: "error",
+        message: "User not found"
+      });
+    }
+
+    return res.status(200).json({
+      status: "success",
+      data: {
+        subscription
       }
     });
   } catch (error) {
@@ -718,6 +741,7 @@ module.exports = {
   createGatewaySubscription,
   getAdminBasicPlan,
   getAllSubscriptionPlans,
+  getMySubscriptionStatus,
   getSubscriptionPlans,
   handleRazorpaySubscriptionWebhook,
   saveAdminBasicPlan,

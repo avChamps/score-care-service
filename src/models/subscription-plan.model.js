@@ -35,6 +35,55 @@ function mapSubscriptionPlan(row) {
   };
 }
 
+function mapSubscriptionStatus(row) {
+  if (!row) {
+    return null;
+  }
+
+  const accessType =
+    row.subscriptionStatus === "active" || row.subscriptionStatus === "cancelled"
+      ? row.subscriptionDueAt === null || new Date(row.subscriptionDueAt) >= new Date()
+        ? "paid"
+        : "free"
+      : "free";
+  const plan = row.planPublicId
+    ? mapSubscriptionPlan({
+        publicId: row.planPublicId,
+        planName: row.planName,
+        razorpayPlanId: row.razorpayPlanId,
+        amount: row.amount,
+        gstPercentage: row.gstPercentage,
+        currency: row.currency,
+        offerTag: row.offerTag,
+        recommendedFor: row.recommendedFor,
+        title: row.title,
+        subtitle: row.subtitle,
+        description: row.description,
+        imageUrl: row.imageUrl,
+        benefits: row.benefits,
+        comparisonBenefits: row.comparisonBenefits,
+        features: row.features,
+        buttonLabel: row.buttonLabel,
+        skipLabel: row.skipLabel,
+        displayOrder: row.displayOrder,
+        isActive: row.isActive,
+        createdAt: row.planCreatedAt,
+        updatedAt: row.planUpdatedAt
+      })
+    : null;
+
+  return {
+    userId: row.userPublicId,
+    accessType,
+    isSubscribed: accessType === "paid",
+    subscriptionStatus: row.subscriptionStatus,
+    subscriptionStartedAt: row.subscriptionStartedAt,
+    subscriptionDueAt: row.subscriptionDueAt,
+    subscriptionEndsAt: row.subscriptionEndsAt,
+    plan
+  };
+}
+
 function getBillingCycle(publicId) {
   const value = String(publicId || "").toLowerCase();
 
@@ -192,6 +241,45 @@ async function findSubscriptionPlanByPublicId(publicId) {
   );
 
   return mapSubscriptionPlan(rows[0]);
+}
+
+async function findUserSubscriptionStatus(userId) {
+  const [rows] = await pool.query(
+    `SELECT
+      u.public_id AS userPublicId,
+      u.subscription_status AS subscriptionStatus,
+      u.subscription_started_at AS subscriptionStartedAt,
+      u.subscription_due_at AS subscriptionDueAt,
+      u.subscription_ends_at AS subscriptionEndsAt,
+      p.public_id AS planPublicId,
+      p.plan_name AS planName,
+      p.razorpay_plan_id AS razorpayPlanId,
+      p.amount,
+      p.gst_percentage AS gstPercentage,
+      p.currency,
+      p.offer_tag AS offerTag,
+      p.recommended_for AS recommendedFor,
+      p.title,
+      p.subtitle,
+      p.description,
+      p.image_url AS imageUrl,
+      p.benefits,
+      p.comparison_benefits AS comparisonBenefits,
+      p.features,
+      p.button_label AS buttonLabel,
+      p.skip_label AS skipLabel,
+      p.display_order AS displayOrder,
+      p.is_active AS isActive,
+      p.created_at AS planCreatedAt,
+      p.updated_at AS planUpdatedAt
+    FROM users u
+    LEFT JOIN subscription_plans p ON p.id = u.subscription_plan_id
+    WHERE u.id = ?
+    LIMIT 1`,
+    [userId]
+  );
+
+  return mapSubscriptionStatus(rows[0]);
 }
 
 async function updateSubscriptionPlanByPublicId(publicId, values) {
@@ -505,6 +593,7 @@ async function updateGatewaySubscriptionStatus({
 module.exports = {
   createSubscriptionPlan,
   findSubscriptionPlanByPublicId,
+  findUserSubscriptionStatus,
   getDateFromUnix,
   listActiveSubscriptionPlans,
   listAllSubscriptionPlans,
