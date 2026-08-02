@@ -29,6 +29,7 @@ function normalizeNullableString(value) {
 
 function validateCreditRepairDocumentPayload(req) {
   const errors = [];
+  const files = Array.isArray(req.files) ? req.files : [req.file].filter(Boolean);
   const accountNumber = normalizeString(
     req.body.accountNumber || req.body.creditCardNumber || req.body.loanNumber
   );
@@ -43,7 +44,7 @@ function validateCreditRepairDocumentPayload(req) {
     errors.push("accountType is required");
   }
 
-  if (!req.file) {
+  if (files.length === 0) {
     errors.push("file is required");
   }
 
@@ -57,13 +58,14 @@ function validateCreditRepairDocumentPayload(req) {
       issueType: normalizeNullableString(req.body.issueType),
       documentType,
       closingDate: normalizeNullableString(req.body.closingDate),
-      remarks: normalizeNullableString(req.body.remarks)
+      remarks: normalizeNullableString(req.body.remarks),
+      files
     }
   };
 }
 
 async function uploadCreditRepairDocument(req, res, next) {
-  let savedFile = null;
+  const savedFiles = [];
 
   try {
     const { errors, value } = validateCreditRepairDocumentPayload(req);
@@ -75,13 +77,22 @@ async function uploadCreditRepairDocument(req, res, next) {
       });
     }
 
-    savedFile = await saveCreditRepairDocumentFile(req.auth.userId, req.file);
+    const { files, ...documentValue } = value;
 
-    const document = await createCreditRepairDocument(req.auth.internalUserId, {
-      ...value,
-      documentUrl: savedFile.url,
-      fileSize: req.file.size
-    });
+    for (const file of files) {
+      savedFiles.push(await saveCreditRepairDocumentFile(req.auth.userId, file));
+    }
+
+    const documents = [];
+
+    for (const [index, savedFile] of savedFiles.entries()) {
+      documents.push(await createCreditRepairDocument(req.auth.internalUserId, {
+        ...documentValue,
+        documentUrl: savedFile.url,
+        fileSize: files[index].size
+      }));
+    }
+
     const existingRequest = await findLatestCibilRepairRequestByUserId(
       req.auth.internalUserId
     );
@@ -106,16 +117,19 @@ async function uploadCreditRepairDocument(req, res, next) {
 
     return res.status(201).json({
       status: "success",
-      message: "Document uploaded successfully",
+      message: documents.length === 1
+        ? "Document uploaded successfully"
+        : "Documents uploaded successfully",
       data: {
-        document,
+        document: documents[0],
+        documents,
         request,
         notification
       }
     });
   } catch (error) {
-    if (savedFile) {
-      await deleteSavedFiles({ document: [savedFile] }).catch(() => null);
+    if (savedFiles.length > 0) {
+      await deleteSavedFiles({ documents: savedFiles }).catch(() => null);
     }
 
     next(error);

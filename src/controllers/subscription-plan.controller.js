@@ -15,6 +15,11 @@ const {
   createAdminSubscriptionNotification
 } = require("../models/admin-notification.model");
 const {
+  attachRedemptionToOrder,
+  consumeSubscriptionRedemption,
+  findSubscriptionRedemptionForCheckout
+} = require("../models/reward.model");
+const {
   sendMonthlyScoreChangedEmail
 } = require("../services/profile-email.service");
 const {
@@ -175,6 +180,29 @@ function getSubscriptionAmountBreakup(plan) {
     gstAmount,
     finalAmount,
     razorpayAmount: Math.round(finalAmount * 100)
+  };
+}
+
+function applySubscriptionDiscount(amountBreakup, redemption) {
+  const minimumRazorpayAmount = 1;
+  const maxDiscountAmount = Math.max(
+    0,
+    amountBreakup.finalAmount - minimumRazorpayAmount
+  );
+  const discountAmount = Number(
+    Math.min(Number(redemption?.discountAmount || 0), maxDiscountAmount).toFixed(2)
+  );
+  const payableAmount = Number(
+    Math.max(minimumRazorpayAmount, amountBreakup.finalAmount - discountAmount).toFixed(2)
+  );
+
+  return {
+    ...amountBreakup,
+    grossAmount: amountBreakup.finalAmount,
+    discountAmount,
+    finalAmount: payableAmount,
+    razorpayAmount: Math.round(payableAmount * 100),
+    redemption: redemption || null
   };
 }
 
@@ -344,7 +372,34 @@ async function createGatewaySubscription(req, res, next) {
 
     const user = await findUserById(req.auth.internalUserId);
     const prefill = normalizeRazorpayPrefill(user);
-    const amountBreakup = getSubscriptionAmountBreakup(plan);
+    const baseAmountBreakup = getSubscriptionAmountBreakup(plan);
+
+    if (baseAmountBreakup.finalAmount < 1) {
+      return res.status(400).json({
+        status: "error",
+        message: "Selected plan amount is below Razorpay minimum checkout amount"
+      });
+    }
+
+    const redemptionPublicId = normalizeString(req.body.redemptionPublicId);
+    const redemptionResult = await findSubscriptionRedemptionForCheckout({
+      userId: req.auth.internalUserId,
+      redemptionPublicId,
+      planPublicId: plan.publicId,
+      amount: baseAmountBreakup.finalAmount
+    });
+
+    if (redemptionResult?.error) {
+      return res.status(400).json({
+        status: "error",
+        message: redemptionResult.error
+      });
+    }
+
+    const amountBreakup = applySubscriptionDiscount(
+      baseAmountBreakup,
+      redemptionResult?.redemption
+    );
     const customer = await createRazorpayCustomer({
       name: prefill.name || prefill.contact,
       email: prefill.email || undefined,
@@ -365,9 +420,19 @@ async function createGatewaySubscription(req, res, next) {
       notes: {
         userId: req.auth.userId,
         internalUserId: String(req.auth.internalUserId),
-        planPublicId: plan.publicId
+        planPublicId: plan.publicId,
+        redemptionPublicId: redemptionResult?.redemption?.publicId || ""
       }
     });
+
+    if (redemptionResult?.redemption) {
+      await attachRedemptionToOrder({
+        redemptionId: redemptionResult.redemption.id,
+        razorpayOrderId: order.id,
+        applyTo: "subscription_plan",
+        targetPublicId: plan.publicId
+      });
+    }
 
     await setPendingGatewaySubscription({
       userId: req.auth.internalUserId,
@@ -420,18 +485,30 @@ async function confirmGatewaySubscriptionPayment(req, res, next) {
 
     const amount = Number(req.body.amount || 0);
     const currency = normalizeString(req.body.currency || "INR").toUpperCase();
+    const redemptionPublicId = normalizeString(req.body.redemptionPublicId);
+    const discountAmount = Number(req.body.discountAmount || 0);
+    const grossAmount = Number(req.body.grossAmount || amount);
+    const rewardRedemptionId = await consumeSubscriptionRedemption({
+      userId: req.auth.internalUserId,
+      redemptionPublicId,
+      razorpayOrderId
+    });
     const plan = await updateGatewaySubscriptionPayment({
       userId: req.auth.internalUserId,
       razorpaySubscriptionId: null,
       razorpayPaymentId,
       amount,
+      grossAmount,
+      discountAmount,
+      rewardRedemptionId,
       currency,
       paymentStatus: "paid",
       paidAt: new Date(),
       currentEnd: null,
       notes: {
         razorpayOrderId,
-        source: "checkout_confirm"
+        source: "checkout_confirm",
+        redemptionPublicId
       }
     });
     const [user, report] = await Promise.all([

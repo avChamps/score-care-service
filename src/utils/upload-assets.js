@@ -552,7 +552,7 @@ const creditRepairDocumentMulter = multer({
   },
   limits: {
     fileSize: 5 * 1024 * 1024,
-    files: 1
+    files: 5
   }
 });
 
@@ -597,12 +597,19 @@ const websiteSettingsDocumentMulter = multer({
 });
 
 function creditRepairDocumentUpload(req, res, next) {
-  creditRepairDocumentMulter.single("file")(req, res, (error) => {
+  creditRepairDocumentMulter.array("file", 5)(req, res, (error) => {
     if (error) {
       if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_SIZE") {
         return res.status(400).json({
           status: "error",
-          message: "file must be 5MB or smaller"
+          message: "Each file must be 5MB or smaller"
+        });
+      }
+
+      if (error instanceof multer.MulterError && error.code === "LIMIT_FILE_COUNT") {
+        return res.status(400).json({
+          status: "error",
+          message: "You can upload up to 5 files"
         });
       }
 

@@ -96,6 +96,26 @@ const {
   getAdminManualCreditReportDownloads
 } = require("../controllers/credit-report.controller");
 const {
+  adjustAdminCoins,
+  getAdminCoinRules,
+  getAdminCoinSummary,
+  getAdminCoinTransactions,
+  updateAdminCoinRule
+} = require("../controllers/coin.controller");
+const {
+  getAdminFraudQueue,
+  getAdminReferrals,
+  recordKycCompleted,
+  recordSubscriptionCompleted,
+  updateAdminReferralFraudStatus
+} = require("../controllers/referral.controller");
+const {
+  createAdminReward,
+  deleteAdminReward,
+  getAdminRewards,
+  updateAdminReward
+} = require("../controllers/reward.controller");
+const {
   createAdminAnnouncement,
   deleteAdminAnnouncement,
   getAdminAnnouncements,
@@ -138,6 +158,25 @@ router.post(
   requireAdmin,
   downloadManualCibilReport
 );
+router.get("/coins/summary", requireAuth, requireAdmin, getAdminCoinSummary);
+router.get("/coins/rules", requireAuth, requireAdmin, getAdminCoinRules);
+router.patch("/coins/rules/:ruleKey", requireAuth, requireAdmin, updateAdminCoinRule);
+router.get("/coins/transactions", requireAuth, requireAdmin, getAdminCoinTransactions);
+router.post("/coins/adjust", requireAuth, requireAdmin, adjustAdminCoins);
+router.get("/referrals", requireAuth, requireAdmin, getAdminReferrals);
+router.get("/referrals/fraud-queue", requireAuth, requireAdmin, getAdminFraudQueue);
+router.patch("/referrals/:publicId/fraud", requireAuth, requireAdmin, updateAdminReferralFraudStatus);
+router.post("/referrals/events/kyc-completed", requireAuth, requireAdmin, recordKycCompleted);
+router.post(
+  "/referrals/events/subscription-completed",
+  requireAuth,
+  requireAdmin,
+  recordSubscriptionCompleted
+);
+router.get("/rewards", requireAuth, requireAdmin, getAdminRewards);
+router.post("/rewards", requireAuth, requireAdmin, createAdminReward);
+router.patch("/rewards/:publicId", requireAuth, requireAdmin, updateAdminReward);
+router.delete("/rewards/:publicId", requireAuth, requireAdmin, deleteAdminReward);
 router.get("/subscription-plans", requireAuth, requireAdmin, getAllSubscriptionPlans);
 router.post("/subscription-plans", requireAuth, requireAdmin, createPlan);
 router.get("/basic-plan", requireAuth, requireAdmin, getAdminBasicPlan);

@@ -310,6 +310,9 @@ async function updateGatewaySubscriptionPayment({
   razorpaySubscriptionId,
   razorpayPaymentId,
   amount,
+  grossAmount,
+  discountAmount,
+  rewardRedemptionId,
   currency,
   paymentStatus,
   paidAt,
@@ -389,6 +392,9 @@ async function updateGatewaySubscriptionPayment({
           user_id,
           subscription_plan_id,
           amount,
+          gross_amount,
+          discount_amount,
+          reward_redemption_id,
           currency,
           payment_status,
           payment_gateway,
@@ -397,9 +403,12 @@ async function updateGatewaySubscriptionPayment({
           paid_at,
           gateway_payload
         )
-        VALUES (?, ?, ?, ?, ?, 'razorpay', ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'razorpay', ?, ?, ?, ?)
         ON DUPLICATE KEY UPDATE
           amount = VALUES(amount),
+          gross_amount = VALUES(gross_amount),
+          discount_amount = VALUES(discount_amount),
+          reward_redemption_id = VALUES(reward_redemption_id),
           currency = VALUES(currency),
           payment_status = VALUES(payment_status),
           paid_at = VALUES(paid_at),
@@ -409,6 +418,9 @@ async function updateGatewaySubscriptionPayment({
           user.id,
           user.subscription_plan_id,
           amount,
+          grossAmount ?? amount,
+          discountAmount || 0,
+          rewardRedemptionId || null,
           currency,
           paymentStatus,
           razorpaySubscriptionId,
@@ -423,6 +435,9 @@ async function updateGatewaySubscriptionPayment({
           user_id,
           subscription_plan_id,
           amount,
+          gross_amount,
+          discount_amount,
+          reward_redemption_id,
           currency,
           payment_status,
           payment_gateway,
@@ -430,9 +445,12 @@ async function updateGatewaySubscriptionPayment({
           paid_at,
           gateway_payload
         )
-        VALUES (?, ?, ?, ?, ?, 'razorpay', ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'razorpay', ?, ?, ?)
         ON DUPLICATE KEY UPDATE
           amount = VALUES(amount),
+          gross_amount = VALUES(gross_amount),
+          discount_amount = VALUES(discount_amount),
+          reward_redemption_id = VALUES(reward_redemption_id),
           currency = VALUES(currency),
           payment_status = VALUES(payment_status),
           paid_at = VALUES(paid_at),
@@ -442,6 +460,9 @@ async function updateGatewaySubscriptionPayment({
           user.id,
           user.subscription_plan_id,
           amount,
+          grossAmount ?? amount,
+          discountAmount || 0,
+          rewardRedemptionId || null,
           currency,
           paymentStatus,
           razorpayPaymentId,

@@ -12,7 +12,7 @@ async function startServer() {
     console.warn(`Database connection failed: ${error.message}`);
   }
 
-  app.listen(env.port, () => {
+  app.listen(env.port, "0.0.0.0", () => {
     console.log(`ScoreCare service running on port ${env.port}`);
     startNotificationScheduler();
 
