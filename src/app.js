@@ -55,6 +55,7 @@ app.get("/", (_req, res) => {
 });
 
 app.use("/auth", authRoutes);
+app.use("/api/auth", authRoutes);
 app.use("/admin", adminRoutes);
 app.use("/ai", aiRoutes);
 app.use("/cibil-repair-content", cibilRepairContentRoutes);
