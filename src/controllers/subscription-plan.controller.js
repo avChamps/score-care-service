@@ -436,7 +436,7 @@ async function createGatewaySubscription(req, res, next) {
       method: "upi",
       receipt: `sub_${req.auth.internalUserId}_${Date.now()}`,
       token: {
-        max_amount: amountBreakup.razorpayAmount,
+        max_amount: baseAmountBreakup.razorpayAmount,
         expire_at: Math.floor(Date.now() / 1000) + 30 * 365 * 24 * 60 * 60,
         frequency: "as_presented"
       },

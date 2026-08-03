@@ -67,6 +67,7 @@ function mapRedemption(row) {
     status: row.status,
     applyTo: row.applyTo,
     targetPublicId: row.targetPublicId,
+    consumedAt: row.consumedAt,
     metadata: parseJson(row.metadata),
     createdAt: row.createdAt,
     updatedAt: row.updatedAt
@@ -254,6 +255,7 @@ async function findRedemptionById(id) {
       rd.status,
       rd.apply_to AS applyTo,
       rd.target_public_id AS targetPublicId,
+      rd.consumed_at AS consumedAt,
       rd.metadata,
       rd.created_at AS createdAt,
       rd.updated_at AS updatedAt
@@ -429,6 +431,7 @@ async function listMyRedemptions({ userId, page = 1, limit = 20 }) {
       rd.status,
       rd.apply_to AS applyTo,
       rd.target_public_id AS targetPublicId,
+      rd.consumed_at AS consumedAt,
       rd.metadata,
       rd.created_at AS createdAt,
       rd.updated_at AS updatedAt
