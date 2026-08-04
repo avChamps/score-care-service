@@ -18,7 +18,8 @@ const {
 const {
   attachRedemptionToOrder,
   consumeSubscriptionRedemption,
-  findSubscriptionRedemptionForCheckout
+  findSubscriptionRedemptionForCheckout,
+  listAvailableSubscriptionRedemptionsForCheckout
 } = require("../models/reward.model");
 const {
   sendMonthlyScoreChangedEmail
@@ -34,14 +35,67 @@ const {
 
 const basicPlanPublicId = "scorecare-basic-monthly";
 
-async function getSubscriptionPlans(_req, res, next) {
+function findBestSubscriptionRedemption(plan, amountBreakup, redemptions) {
+  return redemptions
+    .filter(
+      (redemption) =>
+        !redemption.targetPublicId || redemption.targetPublicId === plan.publicId
+    )
+    .map((redemption) => ({
+      ...redemption,
+      discountAmount:
+        redemption.valueType === "percentage"
+          ? Number(
+              Math.min(
+                amountBreakup.finalAmount,
+                (amountBreakup.finalAmount * Number(redemption.value || 0)) / 100
+              ).toFixed(2)
+            )
+          : Number(
+              Math.min(amountBreakup.finalAmount, Number(redemption.value || 0)).toFixed(2)
+            )
+    }))
+    .sort((first, second) => second.discountAmount - first.discountAmount)[0];
+}
+
+function mapPlanWithCouponPricing(plan, redemptions = []) {
+  const baseAmountBreakup = getSubscriptionAmountBreakup(plan);
+  const redemption = findBestSubscriptionRedemption(
+    plan,
+    baseAmountBreakup,
+    redemptions
+  );
+  const amountBreakup = applySubscriptionDiscount(baseAmountBreakup, redemption);
+
+  return {
+    ...plan,
+    grossAmount: amountBreakup.grossAmount,
+    gstAmount: amountBreakup.gstAmount,
+    discountApplied: amountBreakup.discountAmount > 0,
+    couponApplied: amountBreakup.discountAmount > 0,
+    discountAmount: amountBreakup.discountAmount,
+    finalAmount: amountBreakup.finalAmount,
+    redemptionPublicId: redemption?.publicId || null
+  };
+}
+
+async function getSubscriptionPlans(req, res, next) {
   try {
-    const plans = await listActiveSubscriptionPlans();
+    const [plans, redemptions] = await Promise.all([
+      listActiveSubscriptionPlans(),
+      req.auth?.internalUserId
+        ? listAvailableSubscriptionRedemptionsForCheckout(req.auth.internalUserId)
+        : []
+    ]);
 
     return res.status(200).json({
       status: "success",
       data: {
-        plans
+        couponPricing: {
+          authenticated: Boolean(req.auth?.internalUserId),
+          applied: redemptions.length > 0
+        },
+        plans: plans.map((plan) => mapPlanWithCouponPricing(plan, redemptions))
       }
     });
   } catch (error) {

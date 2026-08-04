@@ -358,6 +358,43 @@ async function findSubscriptionRedemptionForCheckout({
   };
 }
 
+async function listAvailableSubscriptionRedemptionsForCheckout(userId) {
+  const [rows] = await pool.query(
+    `SELECT
+      rd.id AS internalId,
+      rd.public_id AS publicId,
+      rd.user_id AS userId,
+      rd.status,
+      rd.apply_to AS applyTo,
+      rd.target_public_id AS targetPublicId,
+      rw.public_id AS rewardPublicId,
+      rw.title AS rewardTitle,
+      rw.type AS rewardType,
+      rw.value,
+      rw.value_type AS valueType
+    FROM reward_redemptions rd
+    JOIN rewards_catalog rw ON rw.id = rd.reward_id
+    WHERE rd.user_id = ?
+      AND rw.type = 'subscription_discount'
+      AND rd.consumed_at IS NULL
+      AND rd.razorpay_order_id IS NULL
+      AND (rd.apply_to IS NULL OR rd.apply_to = 'subscription_plan')
+    ORDER BY rd.created_at DESC, rd.id DESC`,
+    [userId]
+  );
+
+  return rows.map((redemption) => ({
+    id: redemption.internalId,
+    publicId: redemption.publicId,
+    rewardPublicId: redemption.rewardPublicId,
+    rewardTitle: redemption.rewardTitle,
+    rewardType: redemption.rewardType,
+    targetPublicId: redemption.targetPublicId,
+    value: Number(redemption.value),
+    valueType: redemption.valueType
+  }));
+}
+
 async function attachRedemptionToOrder({
   redemptionId,
   razorpayOrderId,
@@ -608,6 +645,7 @@ module.exports = {
   createReward,
   deleteReward,
   findSubscriptionRedemptionForCheckout,
+  listAvailableSubscriptionRedemptionsForCheckout,
   listMyRedemptions,
   listRewards,
   redeemReward,
